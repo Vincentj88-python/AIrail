@@ -80,7 +80,10 @@ struct RailView: View {
     // MARK: Collapsed
 
     private var hairline: some View {
-        CascadingHairline(reduceMotion: reduceMotion)
+        CascadingHairline(
+            colors: manager.enabledProviderInfos.map(\.color),
+            reduceMotion: reduceMotion
+        )
             .frame(width: 7)
             .frame(maxHeight: .infinity)
             .padding(.vertical, 2)
@@ -191,21 +194,26 @@ private struct ExpandedRailContent: View {
 // MARK: - Cascading hairline
 
 /// Collapsed-state hairline: a 3 pt line whose colors slowly cascade down
-/// its length (the provider palette), with a soft matching glow behind it.
+/// its length — only the colors of the providers actually enabled — with
+/// a soft matching glow behind it. Deliberately subtle.
 private struct CascadingHairline: View {
+    var colors: [Color]
     var reduceMotion: Bool
 
-    /// First color repeated last so the scrolling band tiles seamlessly.
-    private static let cascade: [Color] = [
-        Color(hex: 0x3B82F6), // Cursor blue
-        Color(hex: 0xA855F7), // Codex purple
-        Color(hex: 0xF97316), // Claude orange
-        Color(hex: 0x22C55E), // ChatGPT green
-        Color(hex: 0x14B8A6), // Gemini teal
-        Color(hex: 0x3B82F6),
-    ]
-
     private static let loopDuration: Double = 16
+
+    /// First color repeated last so the scrolling band tiles seamlessly.
+    /// A single enabled provider still cascades, breathing between two
+    /// intensities of its own color.
+    private var cascadeColors: [Color] {
+        guard let first = colors.first else {
+            return [Color.teal.opacity(0.7), Color.blue.opacity(0.45), Color.teal.opacity(0.7)]
+        }
+        if colors.count == 1 {
+            return [first.opacity(0.85), first.opacity(0.3), first.opacity(0.85)]
+        }
+        return colors + [first]
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -220,13 +228,14 @@ private struct CascadingHairline: View {
                     band(height: height, phase: phase)
                         .frame(width: 5)
                         .blur(radius: 4)
-                        .opacity(0.55)
-                    // bright core line
+                        .opacity(0.32)
+                    // core line, kept muted
                     band(height: height, phase: phase)
                         .frame(width: 3)
+                        .opacity(0.72)
                         .overlay(
                             Capsule(style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5)
+                                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
                         )
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -247,7 +256,7 @@ private struct CascadingHairline: View {
     }
 
     private func gradientBlock(height: CGFloat) -> some View {
-        LinearGradient(colors: Self.cascade, startPoint: .top, endPoint: .bottom)
+        LinearGradient(colors: cascadeColors, startPoint: .top, endPoint: .bottom)
             .frame(height: height)
     }
 }

@@ -34,6 +34,7 @@ final class RailWindowController {
 
     private let panel: RailPanel
     private let settings: AppSettings
+    private let manager: ProviderManager
     private let ui: RailUIState
     private var collapseTask: Task<Void, Never>?
 
@@ -42,6 +43,7 @@ final class RailWindowController {
 
     init(settings: AppSettings, manager: ProviderManager, ui: RailUIState) {
         self.settings = settings
+        self.manager = manager
         self.ui = ui
 
         panel = RailPanel(
@@ -132,7 +134,12 @@ final class RailWindowController {
     private func frame(expanded: Bool) -> NSRect {
         guard let screen = NSScreen.screens.first ?? NSScreen.main else { return .zero }
         let visible = screen.visibleFrame
-        let height = (visible.height * 0.7).rounded()
+        // Unobtrusive: ~38% of the screen, but always tall enough for the
+        // expanded card (44 pt logos + 14 pt gaps + card padding + margin).
+        let count = max(1, manager.enabledProviderInfos.count)
+        let contentHeight = CGFloat(count) * 44 + CGFloat(count - 1) * 14 + 32 + 24
+        var height = max(contentHeight, (visible.height * 0.38).rounded())
+        height = min(height, visible.height - 20)
         let y = (visible.midY - height / 2).rounded()
         let width: CGFloat = expanded ? expandedWidth : collapsedWidth
         let x = settings.railSide == .left ? visible.minX : visible.maxX - width

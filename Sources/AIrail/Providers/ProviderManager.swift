@@ -38,6 +38,16 @@ final class ProviderManager: ObservableObject {
             )
         }
 
+        // First launch: enable only the tools detected on this Mac, so users
+        // of one or two AIs don't stare at six logos. Falls back to all six
+        // when nothing is detected; Settings toggles override from then on.
+        if settings.enabledProvidersWereDefaulted {
+            let detected = allProviderInfos.filter { $0.installed }.map { $0.id }
+            if !detected.isEmpty {
+                settings.enabledProviderIds = Set(detected)
+            }
+        }
+
         settings.$refreshInterval
             .dropFirst()
             .sink { [weak self] interval in

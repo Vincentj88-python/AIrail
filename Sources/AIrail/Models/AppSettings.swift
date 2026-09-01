@@ -31,6 +31,10 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(Array(enabledProviderIds).sorted(), forKey: Key.enabledProviders) }
     }
 
+    /// True when no stored provider selection existed yet — the manager then
+    /// narrows the default to the tools actually detected on this Mac.
+    private(set) var enabledProvidersWereDefaulted = false
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -42,6 +46,7 @@ final class AppSettings: ObservableObject {
             enabledProviderIds = Set(stored)
         } else {
             enabledProviderIds = Set(Self.allProviderIds)
+            enabledProvidersWereDefaulted = true
         }
     }
 

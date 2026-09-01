@@ -50,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let selected = self?.uiState.selectedProviderId, !enabled.contains(selected) {
                     self?.overlayController?.close()
                 }
+                self?.railController?.reposition() // rail height follows provider count
             }
             .store(in: &cancellables)
 

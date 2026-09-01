@@ -41,6 +41,9 @@ struct SettingsView: View {
             }
 
             Section("Providers") {
+                Text("Tools detected on this Mac were enabled automatically on first launch. Toggle any on or off — the rail only shows what you enable.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 ForEach(manager.allProviderInfos) { info in
                     Toggle(isOn: enabledBinding(for: info.id)) {
                         HStack(spacing: 8) {
