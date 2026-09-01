@@ -9,10 +9,18 @@ struct RailView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openSettings) private var openSettings
 
-    private var railAnimation: Animation {
+    /// Opening: a bouncy genie-style spring with visible overshoot.
+    private var expandAnimation: Animation {
         reduceMotion
             ? .easeInOut(duration: 0.18)
-            : .spring(response: 0.34, dampingFraction: 0.74)
+            : .spring(response: 0.42, dampingFraction: 0.66)
+    }
+
+    /// Closing: quicker and critically damped — the rail tucks away.
+    private var collapseAnimation: Animation {
+        reduceMotion
+            ? .easeInOut(duration: 0.15)
+            : .spring(response: 0.28, dampingFraction: 0.9)
     }
 
     private var edge: Alignment {
@@ -23,17 +31,23 @@ struct RailView: View {
         settings.railSide == .left ? .leading : .trailing
     }
 
+    private var edgeAnchor: UnitPoint {
+        settings.railSide == .left ? UnitPoint(x: 0, y: 0.5) : UnitPoint(x: 1, y: 0.5)
+    }
+
     var body: some View {
         ZStack(alignment: edge) {
             Color.clear
             if ui.isExpanded {
-                expandedRail
-                    .padding(edgePadding, 6)
-                    .transition(
-                        reduceMotion
-                            ? .opacity
-                            : .opacity.combined(with: .scale(scale: 0.9, anchor: settings.railSide == .left ? .leading : .trailing))
-                    )
+                ExpandedRailContent(
+                    settings: settings,
+                    manager: manager,
+                    ui: ui,
+                    reduceMotion: reduceMotion,
+                    onSelect: onSelect
+                )
+                .padding(edgePadding, 6)
+                .transition(railTransition)
             } else {
                 hairline
                     .padding(edgePadding, 4)
@@ -41,7 +55,7 @@ struct RailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: edge)
-        .animation(railAnimation, value: ui.isExpanded)
+        .animation(ui.isExpanded ? expandAnimation : collapseAnimation, value: ui.isExpanded)
         .contextMenu {
             Button("Settings…") {
                 NSApp.activate(ignoringOtherApps: true)
@@ -52,6 +66,15 @@ struct RailView: View {
                 NSApp.terminate(nil)
             }
         }
+    }
+
+    /// The card grows out of the screen edge and tucks back into it.
+    private var railTransition: AnyTransition {
+        if reduceMotion { return .opacity }
+        return .asymmetric(
+            insertion: .scale(scale: 0.55, anchor: edgeAnchor).combined(with: .opacity),
+            removal: .scale(scale: 0.85, anchor: edgeAnchor).combined(with: .opacity)
+        )
     }
 
     // MARK: Collapsed
@@ -65,53 +88,96 @@ struct RailView: View {
             .accessibilityLabel("AIrail")
             .accessibilityHint("Move the pointer here to expand the usage rail.")
     }
+}
 
-    // MARK: Expanded
+// MARK: - Expanded rail
 
-    private var expandedRail: some View {
+/// The expanded card. Owns the entrance stagger (logos cascade in one after
+/// another) and the Dock-style magnify-on-hover for individual logos.
+private struct ExpandedRailContent: View {
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var manager: ProviderManager
+    @ObservedObject var ui: RailUIState
+    var reduceMotion: Bool
+    var onSelect: (String) -> Void
+
+    @State private var appeared = false
+    @State private var hoveredProviderId: String?
+
+    var body: some View {
         VStack(spacing: 14) {
-            ForEach(manager.enabledProviderInfos) { info in
-                let snapshot = manager.snapshot(for: info.id)
-                Button {
-                    onSelect(info.id)
-                } label: {
-                    LogoMark(
-                        color: info.color,
-                        symbolName: info.symbolName,
-                        brandIconPath: info.brandIconPath,
-                        percent: snapshot?.ringPercent,
-                        size: 44,
-                        isSelected: ui.selectedProviderId == info.id
-                    )
-                }
-                .buttonStyle(.plain)
-                .help(helpText(info: info, snapshot: snapshot))
-                .accessibilityLabel(info.displayName)
-                .accessibilityValue(
-                    snapshot?.ringPercent.map { "\(Int($0.rounded())) percent used" } ?? "no data"
-                )
+            let infos = manager.enabledProviderInfos
+            ForEach(Array(infos.enumerated()), id: \.element.id) { index, info in
+                logoButton(info: info, index: index)
             }
         }
         .padding(.vertical, 16)
         .padding(.horizontal, 9)
-        .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .fill(Color.black.opacity(0.24))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.09))
-                )
-        )
+        .background(card)
         .shadow(
             color: .black.opacity(0.35),
             radius: 14,
             x: settings.railSide == .left ? 4 : -4,
             y: 2
         )
+        .onAppear { appeared = true }
+    }
+
+    private func logoButton(info: ProviderInfo, index: Int) -> some View {
+        let snapshot = manager.snapshot(for: info.id)
+        let isHovered = hoveredProviderId == info.id && !reduceMotion
+        return Button {
+            onSelect(info.id)
+        } label: {
+            LogoMark(
+                color: info.color,
+                symbolName: info.symbolName,
+                brandIconPath: info.brandIconPath,
+                percent: snapshot?.ringPercent,
+                size: 44,
+                isSelected: ui.selectedProviderId == info.id
+            )
+        }
+        .buttonStyle(.plain)
+        // Dock-style magnification on hover.
+        .scaleEffect(isHovered ? 1.16 : 1)
+        .animation(.spring(response: 0.25, dampingFraction: 0.6), value: isHovered)
+        .onHover { hovering in
+            if hovering {
+                hoveredProviderId = info.id
+            } else if hoveredProviderId == info.id {
+                hoveredProviderId = nil
+            }
+        }
+        // Staggered entrance: each logo pops in slightly after the previous.
+        .opacity(appeared ? 1 : 0)
+        .scaleEffect(appeared || reduceMotion ? 1 : 0.4)
+        .offset(x: appeared || reduceMotion ? 0 : (settings.railSide == .left ? -14 : 14))
+        .animation(entranceAnimation(index: index), value: appeared)
+        .help(helpText(info: info, snapshot: snapshot))
+        .accessibilityLabel(info.displayName)
+        .accessibilityValue(
+            snapshot?.ringPercent.map { "\(Int($0.rounded())) percent used" } ?? "no data"
+        )
+    }
+
+    private func entranceAnimation(index: Int) -> Animation {
+        reduceMotion
+            ? .easeInOut(duration: 0.18)
+            : .spring(response: 0.4, dampingFraction: 0.62).delay(0.04 + Double(index) * 0.045)
+    }
+
+    private var card: some View {
+        RoundedRectangle(cornerRadius: 26, style: .continuous)
+            .fill(.ultraThinMaterial)
+            .overlay(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(Color.black.opacity(0.24))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.09))
+            )
     }
 
     private func helpText(info: ProviderInfo, snapshot: UsageSnapshot?) -> String {
@@ -121,6 +187,8 @@ struct RailView: View {
         return info.displayName
     }
 }
+
+// MARK: - Cascading hairline
 
 /// Collapsed-state hairline: a 3 pt line whose colors slowly cascade down
 /// its length (the provider palette), with a soft matching glow behind it.
@@ -137,7 +205,7 @@ private struct CascadingHairline: View {
         Color(hex: 0x3B82F6),
     ]
 
-    private static let loopDuration: Double = 8
+    private static let loopDuration: Double = 16
 
     var body: some View {
         GeometryReader { geo in
