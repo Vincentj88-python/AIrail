@@ -5,6 +5,7 @@ import SwiftUI
 struct LogoMark: View {
     let color: Color
     let symbolName: String
+    var brandIconPath: String? = nil
     let percent: Double?
     var size: CGFloat = 44
     var isSelected = false
@@ -27,9 +28,15 @@ struct LogoMark: View {
                 .fill(.ultraThinMaterial)
                 .overlay(Circle().fill(Color.black.opacity(0.28)))
                 .padding(ringWidth * 2)
-            Image(systemName: symbolName)
-                .font(.system(size: size * 0.34, weight: .medium))
-                .foregroundStyle(color)
+            if let brandIconPath {
+                SVGPathShape(pathData: brandIconPath)
+                    .fill(color)
+                    .frame(width: size * 0.44, height: size * 0.44)
+            } else {
+                Image(systemName: symbolName)
+                    .font(.system(size: size * 0.34, weight: .medium))
+                    .foregroundStyle(color)
+            }
         }
         .frame(width: size, height: size)
         .overlay {

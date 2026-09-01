@@ -6,6 +6,7 @@ final class GeminiProvider: UsageProviding {
     let displayName = "Gemini"
     let color = Color(hex: 0x14B8A6)
     let symbolName = "sparkle"
+    let brandIconPath: String? = BrandIcons.gemini
 
     private let mock = MockUsageEngine(profile: .init(
         plan: "Pro",

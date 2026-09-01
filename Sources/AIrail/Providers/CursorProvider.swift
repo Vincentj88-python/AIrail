@@ -6,6 +6,7 @@ final class CursorProvider: UsageProviding {
     let displayName = "Cursor"
     let color = Color(hex: 0x3B82F6)
     let symbolName = "chevron.left.forwardslash.chevron.right"
+    let brandIconPath: String? = BrandIcons.cursor
 
     private let mock = MockUsageEngine(profile: .init(
         plan: "Pro",

@@ -6,6 +6,7 @@ final class CopilotProvider: UsageProviding {
     let displayName = "Copilot"
     let color = Color(hex: 0x9CA3AF)
     let symbolName = "cpu"
+    let brandIconPath: String? = BrandIcons.copilot
 
     private let mock = MockUsageEngine(profile: .init(
         plan: "Pro",

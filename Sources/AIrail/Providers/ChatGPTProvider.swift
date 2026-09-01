@@ -6,6 +6,7 @@ final class ChatGPTProvider: UsageProviding {
     let displayName = "ChatGPT"
     let color = Color(hex: 0x22C55E)
     let symbolName = "bubble.left.and.bubble.right"
+    let brandIconPath: String? = BrandIcons.openAI
 
     private let mock = MockUsageEngine(profile: .init(
         plan: "Plus",

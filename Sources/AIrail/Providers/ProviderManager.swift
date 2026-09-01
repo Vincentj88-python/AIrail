@@ -8,6 +8,7 @@ struct ProviderInfo: Identifiable, Sendable {
     let displayName: String
     let color: Color
     let symbolName: String
+    let brandIconPath: String?
     let installed: Bool
 }
 
@@ -32,6 +33,7 @@ final class ProviderManager: ObservableObject {
                 displayName: $0.displayName,
                 color: $0.color,
                 symbolName: $0.symbolName,
+                brandIconPath: $0.brandIconPath,
                 installed: $0.isInstalled()
             )
         }

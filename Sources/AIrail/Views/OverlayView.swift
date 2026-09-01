@@ -49,7 +49,13 @@ struct OverlayView: View {
 
     private func header(info: ProviderInfo, snapshot: UsageSnapshot?) -> some View {
         HStack(spacing: 12) {
-            LogoMark(color: info.color, symbolName: info.symbolName, percent: nil, size: 36)
+            LogoMark(
+                color: info.color,
+                symbolName: info.symbolName,
+                brandIconPath: info.brandIconPath,
+                percent: nil,
+                size: 36
+            )
             Text(info.displayName)
                 .font(.system(size: 26, weight: .semibold))
             if let plan = snapshot?.plan {

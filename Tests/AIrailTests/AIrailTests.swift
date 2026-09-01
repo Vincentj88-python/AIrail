@@ -58,6 +58,20 @@ final class AIrailTests: XCTestCase {
         }
     }
 
+    // MARK: Brand icons
+
+    func testBrandIconPathsParseWithinViewBox() {
+        XCTAssertEqual(BrandIcons.all.count, 5)
+        for data in BrandIcons.all {
+            let path = SVGPathParser.parse(data)
+            XCTAssertFalse(path.isEmpty, "brand icon must produce a non-empty path")
+            let box = path.boundingRect
+            XCTAssertTrue(box.minX >= -0.5 && box.minY >= -0.5, "path escapes the 24×24 viewBox")
+            XCTAssertTrue(box.maxX <= 24.5 && box.maxY <= 24.5, "path escapes the 24×24 viewBox")
+            XCTAssertTrue(box.width > 10 && box.height > 10, "icon suspiciously small — parser likely bailed early")
+        }
+    }
+
     @MainActor
     func testRandomWalkIsSlowAndBounded() {
         let walk = RandomWalk(start: 50, maxStep: 2)

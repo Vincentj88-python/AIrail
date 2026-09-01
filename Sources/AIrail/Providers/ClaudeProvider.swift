@@ -6,6 +6,7 @@ final class ClaudeProvider: UsageProviding {
     let displayName = "Claude"
     let color = Color(hex: 0xF97316)
     let symbolName = "sparkles"
+    let brandIconPath: String? = BrandIcons.claude
 
     private let mock = MockUsageEngine(profile: .init(
         plan: "Max",

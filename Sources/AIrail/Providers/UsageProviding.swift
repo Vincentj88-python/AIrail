@@ -6,8 +6,14 @@ protocol UsageProviding: AnyObject {
     var displayName: String { get }
     var color: Color { get }
     var symbolName: String { get }
+    /// Real brand mark as SVG path data; nil falls back to `symbolName`.
+    var brandIconPath: String? { get }
     func isInstalled() -> Bool
     func fetchUsage() async -> UsageSnapshot
+}
+
+extension UsageProviding {
+    var brandIconPath: String? { nil }
 }
 
 extension Color {

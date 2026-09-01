@@ -57,27 +57,10 @@ struct RailView: View {
     // MARK: Collapsed
 
     private var hairline: some View {
-        Capsule(style: .continuous)
-            .fill(.ultraThinMaterial)
-            .overlay(
-                Capsule(style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.teal.opacity(0.75),
-                                Color.blue.opacity(0.55),
-                                Color.teal.opacity(0.75),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-            )
-            .frame(width: 5)
+        CascadingHairline(reduceMotion: reduceMotion)
+            .frame(width: 7)
             .frame(maxHeight: .infinity)
             .padding(.vertical, 2)
-            .shadow(color: .teal.opacity(0.5), radius: 6)
-            .opacity(0.9)
             .accessibilityElement()
             .accessibilityLabel("AIrail")
             .accessibilityHint("Move the pointer here to expand the usage rail.")
@@ -95,6 +78,7 @@ struct RailView: View {
                     LogoMark(
                         color: info.color,
                         symbolName: info.symbolName,
+                        brandIconPath: info.brandIconPath,
                         percent: snapshot?.ringPercent,
                         size: 44,
                         isSelected: ui.selectedProviderId == info.id
@@ -135,5 +119,67 @@ struct RailView: View {
             return "\(info.displayName) — \(Int(percent.rounded()))%"
         }
         return info.displayName
+    }
+}
+
+/// Collapsed-state hairline: a 3 pt line whose colors slowly cascade down
+/// its length (the provider palette), with a soft matching glow behind it.
+private struct CascadingHairline: View {
+    var reduceMotion: Bool
+
+    /// First color repeated last so the scrolling band tiles seamlessly.
+    private static let cascade: [Color] = [
+        Color(hex: 0x3B82F6), // Cursor blue
+        Color(hex: 0xA855F7), // Codex purple
+        Color(hex: 0xF97316), // Claude orange
+        Color(hex: 0x22C55E), // ChatGPT green
+        Color(hex: 0x14B8A6), // Gemini teal
+        Color(hex: 0x3B82F6),
+    ]
+
+    private static let loopDuration: Double = 8
+
+    var body: some View {
+        GeometryReader { geo in
+            let height = geo.size.height
+            TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: reduceMotion)) { context in
+                let time = context.date.timeIntervalSinceReferenceDate
+                let phase = reduceMotion
+                    ? 0
+                    : CGFloat((time / Self.loopDuration).truncatingRemainder(dividingBy: 1))
+                ZStack {
+                    // soft glow, cascading in sync with the core
+                    band(height: height, phase: phase)
+                        .frame(width: 5)
+                        .blur(radius: 4)
+                        .opacity(0.55)
+                    // bright core line
+                    band(height: height, phase: phase)
+                        .frame(width: 3)
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5)
+                        )
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+
+    /// A doubled gradient scrolled by `phase` and masked to a capsule,
+    /// so the colors flow downward and wrap without a visible seam.
+    private func band(height: CGFloat, phase: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            gradientBlock(height: height)
+            gradientBlock(height: height)
+        }
+        .offset(y: (phase - 1) * height)
+        .frame(height: height, alignment: .top)
+        .mask(Capsule(style: .continuous))
+    }
+
+    private func gradientBlock(height: CGFloat) -> some View {
+        LinearGradient(colors: Self.cascade, startPoint: .top, endPoint: .bottom)
+            .frame(height: height)
     }
 }
