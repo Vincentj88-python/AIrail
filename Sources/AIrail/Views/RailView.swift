@@ -193,36 +193,51 @@ private struct ExpandedRailContent: View {
 
 // MARK: - Cascading hairline
 
-/// Collapsed-state hairline: a 3 pt line whose colors slowly cascade down
-/// its length — only the colors of the providers actually enabled — with
-/// a soft matching glow behind it. Deliberately subtle.
+/// Collapsed-state hairline: a 3 pt line that wears ONE provider color at a
+/// time. Each color holds for a few seconds, then the next enabled provider's
+/// color washes down through the bar. Never a rainbow — at most two colors
+/// are visible, and only during the handoff.
 private struct CascadingHairline: View {
     var colors: [Color]
     var reduceMotion: Bool
 
-    private static let loopDuration: Double = 16
+    /// Seconds each color owns the bar (hold + handoff).
+    private static let perColorDuration: Double = 8
 
-    /// First color repeated last so the scrolling band tiles seamlessly.
-    /// A single enabled provider still cascades, breathing between two
-    /// intensities of its own color.
-    private var cascadeColors: [Color] {
+    private var displayColors: [Color] {
         guard let first = colors.first else {
-            return [Color.teal.opacity(0.7), Color.blue.opacity(0.45), Color.teal.opacity(0.7)]
+            return [Color.teal.opacity(0.7), Color.teal.opacity(0.35)]
         }
         if colors.count == 1 {
-            return [first.opacity(0.85), first.opacity(0.3), first.opacity(0.85)]
+            // Single provider: breathe between two intensities of its color.
+            return [first.opacity(0.85), first.opacity(0.4)]
         }
-        return colors + [first]
+        return colors
+    }
+
+    /// One bar-height zone per color: 75% solid hold, 25% blend into the next.
+    private var stripGradient: Gradient {
+        let palette = displayColors
+        let count = Double(palette.count)
+        var stops: [Gradient.Stop] = []
+        for (index, color) in palette.enumerated() {
+            let start = Double(index) / count
+            stops.append(.init(color: color, location: start))
+            stops.append(.init(color: color, location: start + 0.75 / count))
+        }
+        stops.append(.init(color: palette[0], location: 1))
+        return Gradient(stops: stops)
     }
 
     var body: some View {
         GeometryReader { geo in
             let height = geo.size.height
+            let loopDuration = Self.perColorDuration * Double(max(1, displayColors.count))
             TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: reduceMotion)) { context in
                 let time = context.date.timeIntervalSinceReferenceDate
                 let phase = reduceMotion
                     ? 0
-                    : CGFloat((time / Self.loopDuration).truncatingRemainder(dividingBy: 1))
+                    : CGFloat((time / loopDuration).truncatingRemainder(dividingBy: 1))
                 ZStack {
                     // soft glow, cascading in sync with the core
                     band(height: height, phase: phase)
@@ -243,20 +258,22 @@ private struct CascadingHairline: View {
         }
     }
 
-    /// A doubled gradient scrolled by `phase` and masked to a capsule,
-    /// so the colors flow downward and wrap without a visible seam.
+    /// The full color strip is `count` bar-heights tall, so the visible
+    /// window shows a single color zone at a time. Doubled and scrolled by
+    /// `phase`, masked to a capsule, so it wraps without a visible seam.
     private func band(height: CGFloat, phase: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            gradientBlock(height: height)
-            gradientBlock(height: height)
+        let stripHeight = height * CGFloat(max(1, displayColors.count))
+        return VStack(spacing: 0) {
+            gradientBlock(stripHeight: stripHeight)
+            gradientBlock(stripHeight: stripHeight)
         }
-        .offset(y: (phase - 1) * height)
+        .offset(y: (phase - 1) * stripHeight)
         .frame(height: height, alignment: .top)
         .mask(Capsule(style: .continuous))
     }
 
-    private func gradientBlock(height: CGFloat) -> some View {
-        LinearGradient(colors: cascadeColors, startPoint: .top, endPoint: .bottom)
-            .frame(height: height)
+    private func gradientBlock(stripHeight: CGFloat) -> some View {
+        LinearGradient(gradient: stripGradient, startPoint: .top, endPoint: .bottom)
+            .frame(height: stripHeight)
     }
 }
