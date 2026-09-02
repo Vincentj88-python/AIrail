@@ -46,7 +46,7 @@ The rail shows your connected accounts (each has a *Show on rail* switch) and si
 
 ## Notch and Island
 
-On a MacBook with a notch, **Settings › Rail › Position › Notch** folds the rail into it, Dynamic Island-style: idle, a hairline cascades under the notch; hover, and the notch grows down into a black island holding the marks and rings; click, and the HUD hangs beneath it. It uses the notch geometry macOS reports (`safeAreaInsets`, `auxiliaryTopLeft/RightArea`), works over full-screen apps, and falls back to the left edge whenever no notched display is attached (clamshell, external-only).
+On a MacBook with a notch, **Settings › Rail › Position › Notch** folds the rail into it, Dynamic Island-style: idle, a hairline sits under the notch; hover, and the notch grows down into a black island (OLED black, so it merges with the physical cut-out) holding the marks and rings; click, and the HUD hangs beneath it. It uses the notch geometry macOS reports (`safeAreaInsets`), works over full-screen apps, and falls back to the left edge whenever no notched display is attached (clamshell, external-only).
 
 Displays without a notch get **Island** instead: the same look, drawn in the app's frosted dark glass (the wallpaper shows faintly through) with a small pill at the top centre of the menu bar, hairline beneath, growing into the marks on hover. Pick the display first, then the position — Notch is offered for the built-in display, Island for the others. Point at a mark and its name and percent reveal in a caption line beneath, the way the Dynamic Island shows detail.
 
@@ -54,7 +54,7 @@ Displays without a notch get **Island** instead: the same look, drawn in the app
 
 Click a mark for its glass HUD. Top to bottom: the session ring (or the billing-cycle/monthly ring for tools without sessions) with reset times; the provider's meters when it has several; a chart with a `24 Hours | 7 Days` switch in the style of System Settings › Battery — hover any bar or day for its tokens, requests and input/output/cache split, and for Claude and Codex the current 5-hour session window is shaded so you can see where you are in it; *by model* and *by project* lists (Screen Time-style share bars); and one line of activity — requests, sessions, thinking share, top tools. Everything below the ring comes from local transcripts or the tool's own per-request feed, never estimates.
 
-The collapsed hairline is a subtle 3 pt line whose colors slowly cascade through the colors of the providers you have enabled, with a soft matching glow (static under Reduce Motion).
+The collapsed hairline is a subtle line in a single calm accent that gently breathes, with a soft matching glow (static under Reduce Motion) — barely there on purpose.
 
 ## Demo data
 
