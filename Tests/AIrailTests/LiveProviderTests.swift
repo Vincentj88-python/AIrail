@@ -41,6 +41,28 @@ final class LiveProviderTests: XCTestCase {
         XCTAssertNotNil(snapshot.weeklyPercent)
     }
 
+    /// Keyed platforms run only when a key is in the environment, e.g.
+    /// `TEST_RUNNER_AIRAIL_OPENROUTER_KEY=sk-or-… xcodebuild test …`.
+    @MainActor
+    func testKeyedPlatformsLiveRead() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let keys: [(KeyedPlatform, String)] = [
+            (.openRouter, "AIRAIL_OPENROUTER_KEY"),
+            (.deepSeek, "AIRAIL_DEEPSEEK_KEY"),
+            (.anthropicAPI, "AIRAIL_ANTHROPIC_ADMIN_KEY"),
+            (.openAIAPI, "AIRAIL_OPENAI_ADMIN_KEY"),
+        ]
+        var ran = 0
+        for (platform, variable) in keys {
+            guard let key = env[variable], !key.isEmpty else { continue }
+            ran += 1
+            let snapshot = try await platform.fetch(key, platform.id, platform.displayName)
+            print("\(platform.id):", describe(snapshot))
+            XCTAssertEqual(snapshot.status, .ok)
+        }
+        try XCTSkipIf(ran == 0, "no AIRAIL_*_KEY variables set")
+    }
+
     /// The Keychain half of the Claude provider prompts the user, so only the
     /// transcript scan runs here — mainly to see what a first scan costs.
     func testClaudeTranscriptScanIsFastEnough() async throws {

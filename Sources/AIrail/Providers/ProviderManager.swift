@@ -11,6 +11,7 @@ struct ProviderInfo: Identifiable, Sendable {
     let brandIconPath: String?
     let installed: Bool
     let connection: ConnectionMethod
+    let kind: ProviderKind
 }
 
 @MainActor
@@ -41,7 +42,8 @@ final class ProviderManager: ObservableObject {
                 symbolName: $0.symbolName,
                 brandIconPath: $0.brandIconPath,
                 installed: $0.isInstalled(),
-                connection: $0.connection
+                connection: $0.connection,
+                kind: $0.kind
             )
         }
         for provider in providers {
@@ -57,13 +59,14 @@ final class ProviderManager: ObservableObject {
     }
 
     static func makeProviders() -> [any UsageProviding] {
-        [
+        let tools: [any UsageProviding] = [
             CursorProvider(),
             ClaudeProvider(),
             CodexProvider(),
             GeminiProvider(),
             CopilotProvider(),
         ]
+        return tools + KeyedPlatform.catalog.map { KeyedProvider(platform: $0) }
     }
 
     // MARK: Membership
@@ -81,17 +84,25 @@ final class ProviderManager: ObservableObject {
         return allProviderInfos.filter { settings.isShownOnRail($0.id) }
     }
 
+    /// Demo data only ever stands in for tools that could be on this Mac.
     var demoProviderInfos: [ProviderInfo] {
-        let detected = allProviderInfos.filter(\.installed)
-        return detected.isEmpty ? allProviderInfos : detected
+        let tools = allProviderInfos.filter { $0.kind == .tool }
+        let detected = tools.filter(\.installed)
+        return detected.isEmpty ? tools : detected
     }
 
     var connectedProviderInfos: [ProviderInfo] {
         allProviderInfos.filter { settings.isConnected($0.id) }
     }
 
+    /// Tools offered as tiles in the Add Account sheet.
     var connectableProviderInfos: [ProviderInfo] {
-        allProviderInfos.filter { !settings.isConnected($0.id) }
+        allProviderInfos.filter { $0.kind == .tool && !settings.isConnected($0.id) }
+    }
+
+    /// Platforms offered behind the sheet's "Other…" tile.
+    var connectablePlatformInfos: [ProviderInfo] {
+        allProviderInfos.filter { $0.kind == .apiKey && !settings.isConnected($0.id) }
     }
 
     func providerInfo(for id: String) -> ProviderInfo? {
@@ -109,12 +120,23 @@ final class ProviderManager: ObservableObject {
     // MARK: Accounts
 
     /// Connecting is a real read: the account joins the list only once its
-    /// sign-in has been found and used successfully.
-    func connect(_ providerId: String) async throws {
+    /// sign-in (or pasted key) has been used successfully. A key that fails
+    /// its first read is not kept.
+    func connect(_ providerId: String, key: String? = nil) async throws {
         guard let provider = provider(for: providerId) else { return }
         refreshingIds.insert(providerId)
         defer { refreshingIds.remove(providerId) }
-        let snapshot = try await provider.fetchUsage()
+        let keyed = provider as? any KeyedUsageProviding
+        if let keyed, let key {
+            try keyed.storeKey(key)
+        }
+        let snapshot: UsageSnapshot
+        do {
+            snapshot = try await provider.fetchUsage()
+        } catch {
+            if key != nil { keyed?.forgetKey() }
+            throw error
+        }
         let wasDemo = isShowingDemo
         settings.connect(providerId)
         lastLive[providerId] = snapshot
@@ -127,6 +149,7 @@ final class ProviderManager: ObservableObject {
     }
 
     func disconnect(_ providerId: String) {
+        (provider(for: providerId) as? any KeyedUsageProviding)?.forgetKey()
         settings.disconnect(providerId)
         snapshots[providerId] = nil
         lastLive[providerId] = nil

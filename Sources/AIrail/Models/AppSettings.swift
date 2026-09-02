@@ -17,7 +17,9 @@ final class AppSettings: ObservableObject {
         static let hiddenFromRail = "hiddenFromRail"
     }
 
-    static let allProviderIds = ["cursor", "claude", "codex", "gemini", "copilot"]
+    static let toolProviderIds = ["cursor", "claude", "codex", "gemini", "copilot"]
+    static let platformProviderIds = ["openrouter", "deepseek", "anthropic-api", "openai-api"]
+    static let allProviderIds = toolProviderIds + platformProviderIds
 
     @Published var railSide: RailSide {
         didSet { defaults.set(railSide.rawValue, forKey: Key.railSide) }

@@ -21,6 +21,8 @@ struct UsageSnapshot: Identifiable, Sendable {
     var weeklyPercent: Double?
     var resetsAt: Date?
     var credits: Double?
+    /// ISO currency code when `credits` is money rather than a count.
+    var creditsCurrency: String? = nil
     var spend: Double?
     var spendCap: Double?
     var plan: String?
@@ -158,6 +160,18 @@ enum UsageFormatting {
 
     static func dollars(_ value: Double) -> String {
         String(format: "$%.2f", value)
+    }
+
+    /// Credits as a count ("8,760") or, with a currency, as money ("$12.34", "¥88.00").
+    static func credits(_ value: Double, currency: String?) -> String {
+        guard let currency else { return Int(value).formatted() }
+        switch currency.uppercased() {
+        case "USD": return String(format: "$%.2f", value)
+        case "EUR": return String(format: "€%.2f", value)
+        case "GBP": return String(format: "£%.2f", value)
+        case "CNY": return String(format: "¥%.2f", value)
+        default: return String(format: "%.2f %@", value, currency.uppercased())
+        }
     }
 
     /// Model ids the way people say them: "claude-opus-4-8" → "Opus 4.8",

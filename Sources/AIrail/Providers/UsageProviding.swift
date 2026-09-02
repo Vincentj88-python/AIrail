@@ -10,6 +10,7 @@ protocol UsageProviding: AnyObject {
     var brandIconPath: String? { get }
     /// How this provider borrows the sign-in already on the Mac.
     var connection: ConnectionMethod { get }
+    var kind: ProviderKind { get }
     /// Demo profile used while no account is connected.
     var demoProfile: MockUsageEngine.Profile { get }
     func isInstalled() -> Bool
@@ -20,6 +21,17 @@ protocol UsageProviding: AnyObject {
 
 extension UsageProviding {
     var brandIconPath: String? { nil }
+    var kind: ProviderKind { .tool }
+}
+
+/// A provider whose data comes from an API key the user pastes. The key lives
+/// in AIrail's own Keychain item and is forgotten when the account is removed.
+@MainActor
+protocol KeyedUsageProviding: UsageProviding {
+    var platform: KeyedPlatform { get }
+    var hasKey: Bool { get }
+    func storeKey(_ key: String) throws
+    func forgetKey()
 }
 
 extension Color {

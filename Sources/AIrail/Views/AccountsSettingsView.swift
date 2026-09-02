@@ -227,6 +227,12 @@ private struct AccountDetailView: View {
                                 .textSelection(.enabled)
                         }
                     }
+                    if info.kind == .apiKey {
+                        LabeledContent("Key") {
+                            Text("Stored in your Keychain")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
             .formStyle(.grouped)
@@ -273,7 +279,7 @@ private struct AccountDetailView: View {
     private var subtitle: String {
         var parts: [String] = []
         if let plan = snapshot?.plan { parts.append("\(plan) plan") }
-        parts.append("via \(info.connection.toolName)")
+        parts.append(info.kind == .apiKey ? "by API key" : "via \(info.connection.toolName)")
         return parts.joined(separator: " · ")
     }
 
@@ -297,13 +303,36 @@ private struct AddAccountSheet: View {
     @ObservedObject var manager: ProviderManager
     var onConnected: (String) -> Void
 
+    private enum Page { case tools, other }
+
     @Environment(\.dismiss) private var dismiss
+    @State private var page: Page = LaunchOptions.opensOtherAccounts ? .other : .tools
     @State private var connectingId: String?
     @State private var failure: String?
+    @State private var selectedPlatformId: String?
+    @State private var apiKey = ""
 
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
 
+    /// Consumer apps with no usage API: listed so nobody hunts for them.
+    private static let unsupportedPlatforms = "Perplexity, Grok, Claude.ai, ChatGPT on the web, Le Chat and Kimi"
+    private static let requestURL = URL(string: "https://github.com/Vincentj88-python/AIrail/issues/new?title=Provider%20request%3A%20")!
+
     var body: some View {
+        Group {
+            switch page {
+            case .tools: toolsPage
+            case .other: otherPage
+            }
+        }
+        .padding(24)
+        .frame(width: 540)
+        .animation(.default, value: failure)
+    }
+
+    // MARK: Tools
+
+    private var toolsPage: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Add Account")
                 .font(.title2.weight(.semibold))
@@ -316,16 +345,13 @@ private struct AddAccountSheet: View {
                 ForEach(manager.connectableProviderInfos) { info in
                     tile(info)
                 }
+                if !manager.connectablePlatformInfos.isEmpty {
+                    otherTile
+                }
             }
             .padding(.top, 4)
 
-            if let failure {
-                Label(failure, systemImage: "exclamationmark.triangle")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .transition(.opacity)
-            }
+            failureLabel
 
             Text("Looking for ChatGPT? It shares one OpenAI account with Codex, and ChatGPT itself doesn't publish usage limits. Connect Codex to see the Codex limits that come with your ChatGPT plan.")
                 .font(.caption)
@@ -339,54 +365,21 @@ private struct AddAccountSheet: View {
                     .disabled(connectingId != nil)
             }
         }
-        .padding(24)
-        .frame(width: 540)
-        .animation(.default, value: failure)
     }
 
     private func tile(_ info: ProviderInfo) -> some View {
         let isConnecting = connectingId == info.id
         let supported = info.connection.isSupported
         return Button {
-            connect(info)
+            connect(info, key: nil)
         } label: {
-            HStack(spacing: 12) {
-                LogoMark(
-                    color: info.color,
-                    symbolName: info.symbolName,
-                    brandIconPath: info.brandIconPath,
-                    percent: nil,
-                    size: 36
-                )
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(info.displayName)
-                        .font(.headline)
-                    Text(info.connection.summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-                if isConnecting {
-                    ProgressView().controlSize(.small)
-                } else if supported, !info.installed {
-                    Text("Not detected")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.primary.opacity(0.05))
+            tileLabel(
+                mark: LogoMark(color: info.color, symbolName: info.symbolName, brandIconPath: info.brandIconPath, percent: nil, size: 36),
+                title: info.displayName,
+                subtitle: info.connection.summary,
+                trailing: isConnecting ? "…" : (supported && !info.installed ? "Not detected" : nil),
+                showsProgress: isConnecting
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.08))
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(!supported || connectingId != nil)
@@ -395,12 +388,208 @@ private struct AddAccountSheet: View {
         .accessibilityHint(supported ? "Connects this account." : "Not available yet.")
     }
 
-    private func connect(_ info: ProviderInfo) {
+    /// Internet Accounts' "Add Other Account…": platforms reached with a key.
+    private var otherTile: some View {
+        Button {
+            failure = nil
+            page = .other
+        } label: {
+            tileLabel(
+                mark: LogoMark(color: .gray, symbolName: "key.fill", percent: nil, size: 36),
+                title: "Other…",
+                subtitle: "Platforms with a usage API, by API key",
+                trailing: nil,
+                showsProgress: false
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(connectingId != nil)
+        .accessibilityLabel("Other, platforms with a usage API, by API key")
+    }
+
+    private func tileLabel(mark: LogoMark, title: String, subtitle: String, trailing: String?, showsProgress: Bool) -> some View {
+        HStack(spacing: 12) {
+            mark
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            if showsProgress {
+                ProgressView().controlSize(.small)
+            } else if let trailing {
+                Text(trailing)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.primary.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08))
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    // MARK: Other
+
+    private var selectedPlatform: ProviderInfo? {
+        manager.connectablePlatformInfos.first { $0.id == selectedPlatformId }
+    }
+
+    private var selectedCatalogEntry: KeyedPlatform? {
+        KeyedPlatform.catalog.first { $0.id == selectedPlatformId }
+    }
+
+    private var otherPage: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Button {
+                    page = .tools
+                    failure = nil
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(Color.primary.opacity(0.06)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back")
+                Text("Add Other Account")
+                    .font(.title2.weight(.semibold))
+            }
+            Text("Platforms with a documented usage or credits API. The key is stored in your Keychain and sent only to that platform, read-only.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 4) {
+                ForEach(manager.connectablePlatformInfos) { info in
+                    platformRow(info)
+                }
+            }
+
+            if let platform = selectedPlatform, let entry = selectedCatalogEntry {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        SecureField(entry.keyKind, text: $apiKey, prompt: Text(entry.keyPlaceholder))
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit { connectSelected() }
+                        if let url = entry.keyURL {
+                            Link("Where to find it", destination: url)
+                                .font(.caption)
+                        }
+                    }
+                    if let caveat = platform.connection.caveat {
+                        Label {
+                            Text(caveat)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: "info.circle").foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.top, 4)
+            }
+
+            failureLabel
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("No usage API yet")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text("\(Self.unsupportedPlatforms) don't publish usage, so AIrail can't show them honestly. If one adds an API, it belongs here.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Link("Request a provider…", destination: Self.requestURL)
+                    .font(.caption)
+            }
+            .padding(.top, 4)
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(connectingId != nil)
+                Button(connectingId == nil ? "Connect" : "Connecting…") { connectSelected() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(selectedPlatform == nil || apiKey.trimmingCharacters(in: .whitespaces).isEmpty || connectingId != nil)
+            }
+        }
+    }
+
+    private func platformRow(_ info: ProviderInfo) -> some View {
+        let isSelected = selectedPlatformId == info.id
+        return Button {
+            selectedPlatformId = info.id
+            failure = nil
+        } label: {
+            HStack(spacing: 10) {
+                LogoMark(color: info.color, symbolName: info.symbolName, brandIconPath: info.brandIconPath, percent: nil, size: 28)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(info.displayName)
+                        .font(.body)
+                    Text(info.connection.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? Color.accentColor.opacity(0.14) : Color.clear)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(connectingId != nil)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private var failureLabel: some View {
+        if let failure {
+            Label(failure, systemImage: "exclamationmark.triangle")
+                .font(.callout)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+                .transition(.opacity)
+        }
+    }
+
+    // MARK: Connecting
+
+    private func connectSelected() {
+        guard let platform = selectedPlatform else { return }
+        connect(platform, key: apiKey)
+    }
+
+    private func connect(_ info: ProviderInfo, key: String?) {
         failure = nil
         connectingId = info.id
         Task {
             do {
-                try await manager.connect(info.id)
+                try await manager.connect(info.id, key: key)
                 connectingId = nil
                 onConnected(info.id)
                 dismiss()

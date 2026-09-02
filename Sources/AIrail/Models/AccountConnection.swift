@@ -15,11 +15,19 @@ struct ConnectionMethod: Sendable {
     var isSupported = true
 }
 
+/// How an account gets its data: a tool's borrowed sign-in, or a key the user
+/// pasted for a platform with a documented usage API.
+enum ProviderKind: Sendable {
+    case tool, apiKey
+}
+
 enum ConnectionError: LocalizedError, Sendable {
     case notInstalled(tool: String)
     case notSignedIn(tool: String)
     case accessDenied(tool: String)
     case expired(tool: String)
+    case missingKey(platform: String)
+    case invalidKey(platform: String, hint: String?)
     case unreadable(String)
     case network(String)
     case unsupported
@@ -34,6 +42,10 @@ enum ConnectionError: LocalizedError, Sendable {
             return "macOS didn't allow AIrail to read the \(tool) sign-in. Choose Allow when asked."
         case .expired(let tool):
             return "The \(tool) sign-in has expired. Open \(tool) to refresh it."
+        case .missingKey(let platform):
+            return "No API key stored for \(platform). Remove the account and add it again."
+        case .invalidKey(let platform, let hint):
+            return "\(platform) rejected the API key." + (hint.map { " " + $0 } ?? "")
         case .unreadable(let detail):
             return "Couldn't read the local data: \(detail)"
         case .network(let detail):
@@ -50,6 +62,8 @@ enum ConnectionError: LocalizedError, Sendable {
         case .notSignedIn(let tool): return "\(tool) not signed in"
         case .accessDenied: return "Access not allowed"
         case .expired(let tool): return "Sign-in expired — open \(tool)"
+        case .missingKey: return "No API key stored"
+        case .invalidKey: return "API key rejected"
         case .unreadable: return "Couldn't read local data"
         case .network: return "Couldn't reach service"
         case .unsupported: return "Not supported yet"
@@ -61,7 +75,7 @@ enum ConnectionError: LocalizedError, Sendable {
     var isTransient: Bool {
         switch self {
         case .expired, .network, .accessDenied: return true
-        case .notInstalled, .notSignedIn, .unreadable, .unsupported: return false
+        case .notInstalled, .notSignedIn, .missingKey, .invalidKey, .unreadable, .unsupported: return false
         }
     }
 }

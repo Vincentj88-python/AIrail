@@ -268,7 +268,7 @@ struct OverlayView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "cylinder.split.1x2")
                             .foregroundStyle(.secondary)
-                        Text(Int(credits).formatted())
+                        Text(UsageFormatting.credits(credits, currency: snapshot?.creditsCurrency))
                             .font(.system(size: 23, weight: .semibold))
                             .monospacedDigit()
                     }
@@ -279,7 +279,7 @@ struct OverlayView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Credits")
-                .accessibilityValue("\(Int(credits).formatted()) remaining")
+                .accessibilityValue("\(UsageFormatting.credits(credits, currency: snapshot?.creditsCurrency)) remaining")
             }
             if let spend = snapshot?.spend {
                 if snapshot?.credits != nil {

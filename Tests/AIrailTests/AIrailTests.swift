@@ -46,9 +46,11 @@ final class AIrailTests: XCTestCase {
     func testProviderRegistryIdsUnique() {
         let providers = ProviderManager.makeProviders()
         let ids = providers.map { $0.id }
-        XCTAssertEqual(ids.count, 5, "ChatGPT is folded into the Codex account")
+        XCTAssertEqual(ids.count, 9, "five tools (ChatGPT is folded into Codex) plus four keyed platforms")
         XCTAssertEqual(Set(ids).count, ids.count, "provider ids must be unique")
         XCTAssertEqual(Set(ids), Set(AppSettings.allProviderIds))
+        XCTAssertEqual(providers.filter { $0.kind == .tool }.map(\.id), AppSettings.toolProviderIds)
+        XCTAssertEqual(providers.filter { $0.kind == .apiKey }.map(\.id), AppSettings.platformProviderIds)
     }
 
     @MainActor
@@ -129,14 +131,22 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(manager.railProviderInfos.map(\.id), manager.demoProviderInfos.map(\.id))
         XCTAssertFalse(manager.railProviderInfos.isEmpty, "the demo rail is never empty")
 
+        XCTAssertTrue(manager.demoProviderInfos.allSatisfy { $0.kind == .tool }, "keyed platforms never show demo data")
+
         settings.connect("codex")
         XCTAssertFalse(manager.isShowingDemo)
         XCTAssertEqual(manager.railProviderInfos.map(\.id), ["codex"])
         XCTAssertEqual(manager.connectableProviderInfos.map(\.id), ["cursor", "claude", "gemini", "copilot"])
+        XCTAssertEqual(manager.connectablePlatformInfos.map(\.id), AppSettings.platformProviderIds)
 
         settings.setShownOnRail(false, providerId: "codex")
         XCTAssertTrue(manager.railProviderInfos.isEmpty)
         XCTAssertEqual(manager.connectedProviderInfos.map(\.id), ["codex"], "hidden accounts stay connected")
+
+        settings.connect("openrouter")
+        XCTAssertEqual(manager.railProviderInfos.map(\.id), ["openrouter"], "keyed accounts ride the rail like any other")
+        XCTAssertEqual(manager.connectedProviderInfos.map(\.id), ["codex", "openrouter"])
+        XCTAssertEqual(manager.connectablePlatformInfos.map(\.id), ["deepseek", "anthropic-api", "openai-api"])
     }
 
     // MARK: Date parsing
@@ -447,6 +457,108 @@ final class AIrailTests: XCTestCase {
 
         let empty = CursorUsage.detail(events: [], report: report, days: 7, now: now, calendar: calendar)
         XCTAssertTrue(empty.hours.isEmpty && empty.days.isEmpty, "no events fetched must not read as zero usage")
+    }
+
+    // MARK: Keyed platforms
+
+    func testOpenRouterSnapshot() throws {
+        let key = #"{"data":{"label":"laptop","usage":12.5,"limit":50,"limit_remaining":37.5,"is_free_tier":false,"rate_limit":{"requests":200,"interval":"10s"}}}"#
+        let credits = #"{"data":{"total_credits":100,"total_usage":40.25}}"#
+        let snapshot = try OpenRouterUsage.snapshot(keyData: Data(key.utf8), creditsData: Data(credits.utf8), providerId: "openrouter", displayName: "OpenRouter")
+        XCTAssertEqual(snapshot.weeklyPercent, 25)
+        XCTAssertEqual(snapshot.periodLabel, "key limit")
+        XCTAssertEqual(snapshot.spend, 12.5)
+        XCTAssertEqual(snapshot.spendCap, 50)
+        XCTAssertEqual(snapshot.credits, 59.75)
+        XCTAssertEqual(snapshot.creditsCurrency, "USD")
+        XCTAssertEqual(snapshot.account, "laptop")
+        XCTAssertNil(snapshot.plan)
+        XCTAssertEqual(snapshot.status, .ok)
+
+        let unlimitedKey = #"{"data":{"label":"k","usage":3,"limit":null,"is_free_tier":true}}"#
+        let noLimit = try OpenRouterUsage.snapshot(keyData: Data(unlimitedKey.utf8), creditsData: Data(credits.utf8), providerId: "openrouter", displayName: "OpenRouter")
+        XCTAssertEqual(noLimit.weeklyPercent!, 40.25, accuracy: 0.001, "without a key limit the ring is credits used")
+        XCTAssertEqual(noLimit.periodLabel, "credits")
+        XCTAssertEqual(noLimit.plan, "Free tier")
+        XCTAssertThrowsError(try OpenRouterUsage.snapshot(keyData: Data("{}".utf8), creditsData: nil, providerId: "openrouter", displayName: "OpenRouter"))
+    }
+
+    func testDeepSeekSnapshot() throws {
+        let json = #"{"is_available":true,"balance_infos":[{"currency":"CNY","total_balance":"88.00","granted_balance":"0.00","topped_up_balance":"88.00"},{"currency":"USD","total_balance":"12.34","granted_balance":"0.00","topped_up_balance":"12.34"}]}"#
+        let snapshot = try DeepSeekUsage.snapshot(data: Data(json.utf8), providerId: "deepseek", displayName: "DeepSeek")
+        XCTAssertEqual(snapshot.credits, 12.34, "USD balance preferred when present")
+        XCTAssertEqual(snapshot.creditsCurrency, "USD")
+        XCTAssertNil(snapshot.ringPercent, "a balance has no limit to ring")
+        XCTAssertEqual(UsageFormatting.credits(12.34, currency: "USD"), "$12.34")
+        XCTAssertEqual(UsageFormatting.credits(88, currency: "CNY"), "¥88.00")
+        XCTAssertEqual(UsageFormatting.credits(8760, currency: nil), 8760.formatted())
+        XCTAssertThrowsError(try DeepSeekUsage.snapshot(data: Data(#"{"is_available":false,"balance_infos":[]}"#.utf8), providerId: "deepseek", displayName: "DeepSeek"))
+    }
+
+    func testAnthropicAPISnapshot() throws {
+        let now = Date()
+        let calendar = Calendar.current
+        let todayUTC = AnthropicAPIUsage.utcDayWindow(days: 1, now: now).0
+        let iso = AnthropicAPIUsage.iso(todayUTC)
+        let usage = #"""
+        {"data":[{"starting_at":"\#(iso)","ending_at":"\#(iso)","results":[
+          {"model":"claude-opus-5","uncached_input_tokens":1000,"output_tokens":500,"cache_read_input_tokens":8000,"cache_creation":{"ephemeral_1h_input_tokens":200,"ephemeral_5m_input_tokens":300}},
+          {"model":"claude-sonnet-5","uncached_input_tokens":100,"output_tokens":50,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0}}]}],"has_more":false}
+        """#
+        let cost = #"{"data":[{"starting_at":"\#(iso)","results":[{"currency":"USD","amount":"1234.5","cost_type":"tokens"},{"currency":"USD","amount":"100","cost_type":"web_search"}]}]}"#
+        let snapshot = try AnthropicAPIUsage.snapshot(usageData: Data(usage.utf8), costData: Data(cost.utf8), providerId: "anthropic-api", displayName: "Anthropic API", now: now)
+        XCTAssertEqual(snapshot.spend!, 13.345, accuracy: 0.0001, "cost amounts are minor units")
+        XCTAssertEqual(snapshot.weeklyHistory.count, 7)
+        XCTAssertEqual(snapshot.weeklyHistory.last, 1000 + 500 + 8000 + 500 + 150)
+        XCTAssertEqual(snapshot.detail?.byModel.first?.name, "claude-opus-5")
+        XCTAssertEqual(snapshot.detail?.week.tokens.cacheWrite, 500)
+        XCTAssertEqual(calendar.startOfDay(for: snapshot.detail!.days.last!.start), calendar.startOfDay(for: now))
+
+        let url = AnthropicAPIUsage.usageURL(now: now).absoluteString
+        XCTAssertTrue(url.contains("bucket_width=1d") && url.contains("group_by%5B%5D=model"), url)
+    }
+
+    func testOpenAIAPISnapshot() throws {
+        let now = Date()
+        let todayUTC = Int(AnthropicAPIUsage.utcDayWindow(days: 1, now: now).0.timeIntervalSince1970)
+        let usage = #"""
+        {"object":"page","data":[{"object":"bucket","start_time":\#(todayUTC),"end_time":\#(todayUTC + 86400),"results":[
+          {"object":"organization.usage.completions.result","input_tokens":5000,"output_tokens":700,"input_cached_tokens":3000,"num_model_requests":12,"model":"gpt-5.5"}]}],"has_more":false}
+        """#
+        let costs = #"{"object":"page","data":[{"object":"bucket","start_time":\#(todayUTC),"results":[{"object":"organization.costs.result","amount":{"value":0.06,"currency":"usd"}},{"object":"organization.costs.result","amount":{"value":1.5,"currency":"usd"}}]}]}"#
+        let snapshot = try OpenAIAPIUsage.snapshot(usageData: Data(usage.utf8), costData: Data(costs.utf8), providerId: "openai-api", displayName: "OpenAI API", now: now)
+        XCTAssertEqual(snapshot.spend!, 1.56, accuracy: 0.0001)
+        XCTAssertEqual(snapshot.detail?.week.tokens.input, 2000, "input is reported uncached")
+        XCTAssertEqual(snapshot.detail?.week.tokens.cacheRead, 3000)
+        XCTAssertEqual(snapshot.detail?.week.messages, 12)
+        XCTAssertEqual(snapshot.detail?.byModel.first?.name, "gpt-5.5")
+        XCTAssertEqual(snapshot.periodLabel, "month")
+    }
+
+    func testKeychainStoreRoundTrip() throws {
+        let account = "test-\(UUID().uuidString)"
+        defer { KeychainStore.delete(account: account) }
+        XCTAssertNil(try KeychainStore.get(account: account))
+        try KeychainStore.set("sk-first", account: account)
+        XCTAssertEqual(try KeychainStore.get(account: account), "sk-first")
+        try KeychainStore.set("sk-second", account: account)
+        XCTAssertEqual(try KeychainStore.get(account: account), "sk-second", "set replaces an existing item")
+        KeychainStore.delete(account: account)
+        XCTAssertNil(try KeychainStore.get(account: account))
+    }
+
+    @MainActor
+    func testKeyedProviderRejectsEmptyKeyAndForgets() throws {
+        let provider = KeyedProvider(platform: .openRouter)
+        XCTAssertEqual(provider.kind, .apiKey)
+        XCTAssertThrowsError(try provider.storeKey("   "))
+        let account = provider.id
+        defer { KeychainStore.delete(account: account) }
+        try provider.storeKey(" sk-or-test ")
+        XCTAssertEqual(try KeychainStore.get(account: account), "sk-or-test", "keys are trimmed")
+        XCTAssertTrue(provider.hasKey)
+        provider.forgetKey()
+        XCTAssertFalse(provider.hasKey)
     }
 
     // MARK: Transcript scanner
