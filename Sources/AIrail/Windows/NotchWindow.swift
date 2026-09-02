@@ -17,6 +17,7 @@ final class NotchWindowController {
     static let markSize: CGFloat = 40
     static let markSpacing: CGFloat = 12
     static let islandPadding: CGFloat = 20
+    static let islandFlare: CGFloat = 16
     static let islandBodyHeight: CGFloat = markSize + 32 // marks + caption row
 
     private let panel: RailPanel
@@ -141,7 +142,10 @@ final class NotchWindowController {
         if expanded {
             let count = max(1, manager.railProviderInfos.count)
             let content = CGFloat(count) * Self.markSize + CGFloat(count - 1) * Self.markSpacing + Self.islandPadding * 2
-            let width = max(rect.width, content).rounded()
+            // The body is at least the notch's width; flare adds room on each
+            // side for the concave top fillets to reach the full top edge.
+            let body = max(rect.width, content)
+            let width = (body + Self.islandFlare * 2).rounded()
             let height = rect.height + Self.islandBodyHeight
             return NSRect(x: (rect.midX - width / 2).rounded(), y: rect.maxY - height, width: width, height: height)
         }

@@ -115,6 +115,20 @@ caption line under the marks — `hoveredId` hoisted from `NotchMarksRow` into
 id change. `islandBodyHeight` grew to `markSize + 32` to seat it. Falls back to
 the selected provider when the overlay is open.
 
+## Island shape + motion (2026-09-02)
+
+The island felt like a plain dropdown because it was a flat-topped rounded
+rect scaling in. Added `IslandShape` / `NotchPillShape` — a silhouette whose
+top edge flares to full width with concave fillets (melting into the top edge
+like the notch) and necks into a convex-bottomed body. Window reserves
+`islandFlare` (16pt) each side for the fillets; content inset to match. Expand
+spring punchier (response 0.5, damping 0.66) for a liquid overshoot.
+
+Possible next tuning if it still feels off: let the marks/caption fade in a
+beat AFTER the shape settles (currently they scale with the container plus
+their own entrance stagger), and/or a matched-geometry morph from pill to
+island rather than a crossfade.
+
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).

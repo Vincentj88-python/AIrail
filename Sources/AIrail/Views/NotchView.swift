@@ -15,7 +15,8 @@ struct NotchView: View {
     @State private var hoveredId: String?
 
     private var expandAnimation: Animation {
-        reduceMotion ? .easeInOut(duration: 0.18) : .spring(response: 0.42, dampingFraction: 0.7)
+        // A liquid unfurl: quick, with a little overshoot as it settles.
+        reduceMotion ? .easeInOut(duration: 0.18) : .spring(response: 0.5, dampingFraction: 0.66)
     }
 
     private var collapseAnimation: Animation {
@@ -64,9 +65,9 @@ struct NotchView: View {
         VStack(spacing: 0) {
             Group {
                 if ui.notchIsVirtual {
-                    pillShape
+                    NotchPillShape()
                         .fill(Color.black)
-                        .overlay(pillShape.strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+                        .overlay(NotchPillShape().stroke(Color.white.opacity(0.1), lineWidth: 1))
                 } else {
                     Color.clear
                 }
@@ -106,10 +107,12 @@ struct NotchView: View {
             .padding(.bottom, 9)
             .frame(maxHeight: .infinity)
         }
+        // Inset so the body sits inside the flare room the window reserves.
+        .padding(.horizontal, NotchWindowController.islandFlare)
         .frame(maxWidth: .infinity)
         .background(islandShape.fill(Color.black))
-        .overlay(islandShape.strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
-        .shadow(color: .black.opacity(0.45), radius: 16, y: 6)
+        .overlay(islandShape.stroke(Color.white.opacity(0.1), lineWidth: 1))
+        .shadow(color: .black.opacity(0.5), radius: 18, y: 7)
     }
 
     /// Reveals the pointed-at (or open) provider's name and percent, the way
@@ -142,20 +145,9 @@ struct NotchView: View {
         .accessibilityHidden(true)
     }
 
-    /// Flush with the top of the screen, rounded where it meets the desktop.
-    private var islandShape: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(
-            cornerRadii: .init(topLeading: 0, bottomLeading: 20, bottomTrailing: 20, topTrailing: 0),
-            style: .continuous
-        )
-    }
-
-    /// The drawn notch: the same silhouette as the real one, at menu-bar height.
-    private var pillShape: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(
-            cornerRadii: .init(topLeading: 0, bottomLeading: 12, bottomTrailing: 12, topTrailing: 0),
-            style: .continuous
-        )
+    /// The concave-filleted silhouette that melts out of the top edge.
+    private var islandShape: IslandShape {
+        IslandShape(flare: NotchWindowController.islandFlare, bottomRadius: 22)
     }
 }
 
