@@ -233,9 +233,12 @@ Four data-mining features on top of what's already collected:
 - **Ambient rail colour** (`UsageSeverity` → `RailHairline` accent): calm
   periwinkle < 70%, amber 70–90%, red ≥ 90%, from the nearest-to-limit account.
 - **API-equivalent value** (`ModelPricing`): estimates PAYG cost of the week's
-  tokens at the dominant model's public price (cache reads dominate volume and
-  are cheapest). Prices are approximate placeholders — edit `ModelPricing.table`
-  with real numbers. Labelled "est." in the UI.
+  tokens at the dominant model's price. **Live prices** now come from
+  OpenRouter's public models API (`/api/v1/models`, no auth, current, with
+  cache read/write), matched by a normalized model id, cached weekly in
+  UserDefaults; a small built-in table is the offline/unmatched fallback.
+  Verified live: the estimate for the current week jumped from a placeholder
+  to a real figure. Labelled "est." in the UI.
 
 ## Next up
 

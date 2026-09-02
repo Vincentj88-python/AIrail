@@ -704,15 +704,24 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(UsageFormatting.duration(hours: 72), "3.0 days")
     }
 
-    func testAPIValueEstimateFavoursCacheReads() {
+    @MainActor
+    func testAPIValueEstimateUsesCacheAwarePricing() {
         var week = UsageAggregate()
-        // Opus-dominant week, mostly cheap cache reads.
+        // Opus-dominant week, mostly cheap cache reads. Uses the offline
+        // fallback table in tests (no network): opus 5/25/6.25/0.5 per Mtok.
         week.tokens = TokenSplit(input: 1_000_000, output: 200_000, cacheWrite: 500_000, cacheRead: 20_000_000)
         week.models = ["claude-opus-5": 21_700_000]
         let dollars = ModelPricing.estimate(week)!
-        // 1M*15 + 0.2M*75 + 0.5M*18.75 + 20M*1.5, all /1e6
-        XCTAssertEqual(dollars, 15 + 15 + 9.375 + 30, accuracy: 0.01)
+        XCTAssertEqual(dollars, 5 + 5 + 3.125 + 10, accuracy: 0.01)
         XCTAssertNil(ModelPricing.estimate(UsageAggregate()), "no tokens → no estimate")
+    }
+
+    @MainActor
+    func testModelIdNormalization() {
+        XCTAssertEqual(ModelPricing.normalize("anthropic/claude-opus-4.8:batch"), "claude-opus-4.8")
+        XCTAssertEqual(ModelPricing.normalize("claude-opus-4-8"), "claude-opus-4.8")
+        XCTAssertEqual(ModelPricing.normalize("openai/gpt-5.5"), "gpt-5.5")
+        XCTAssertEqual(ModelPricing.normalize("claude-fable-5"), "claude-fable-5")
     }
 
     @MainActor
