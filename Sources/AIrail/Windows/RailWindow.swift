@@ -136,7 +136,7 @@ final class RailWindowController {
         let visible = screen.visibleFrame
         // Unobtrusive: ~38% of the screen, but always tall enough for the
         // expanded card (44 pt logos + 14 pt gaps + card padding + margin).
-        let count = max(1, manager.enabledProviderInfos.count)
+        let count = max(1, manager.railProviderInfos.count)
         let contentHeight = CGFloat(count) * 44 + CGFloat(count - 1) * 14 + 32 + 24
         var height = max(contentHeight, (visible.height * 0.38).rounded())
         height = min(height, visible.height - 20)

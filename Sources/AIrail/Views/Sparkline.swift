@@ -6,6 +6,8 @@ struct Sparkline: View {
     let values: [Double]
     let dates: [Date]
     let color: Color
+    /// Index of the day under the pointer, drawn with a marker line and a bigger dot.
+    var highlighted: Int? = nil
 
     private static let dayNumberFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -35,11 +37,19 @@ struct Sparkline: View {
                         )
                     linePath(points: points)
                         .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    if let highlighted, points.indices.contains(highlighted) {
+                        Path { path in
+                            path.move(to: CGPoint(x: points[highlighted].x, y: 0))
+                            path.addLine(to: CGPoint(x: points[highlighted].x, y: geo.size.height))
+                        }
+                        .stroke(color.opacity(0.5), lineWidth: 1)
+                    }
                     ForEach(points.indices, id: \.self) { index in
+                        let isHighlighted = index == highlighted
                         Circle()
-                            .fill(Color.black.opacity(0.8))
+                            .fill(isHighlighted ? color : Color.black.opacity(0.8))
                             .overlay(Circle().strokeBorder(color, lineWidth: 1.5))
-                            .frame(width: 7, height: 7)
+                            .frame(width: isHighlighted ? 9 : 7, height: isHighlighted ? 9 : 7)
                             .position(points[index])
                     }
                 }

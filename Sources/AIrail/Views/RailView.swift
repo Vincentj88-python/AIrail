@@ -56,6 +56,13 @@ struct RailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: edge)
         .animation(ui.isExpanded ? expandAnimation : collapseAnimation, value: ui.isExpanded)
+        .onAppear {
+            if let tab = LaunchOptions.settingsTab {
+                ui.settingsTab = tab
+                NSApp.activate(ignoringOtherApps: true)
+                openSettings()
+            }
+        }
         .contextMenu {
             Button("Settings…") {
                 NSApp.activate(ignoringOtherApps: true)
@@ -81,7 +88,7 @@ struct RailView: View {
 
     private var hairline: some View {
         CascadingHairline(
-            colors: manager.enabledProviderInfos.map(\.color),
+            colors: manager.railProviderInfos.map(\.color),
             reduceMotion: reduceMotion
         )
             .frame(width: 7)
@@ -109,7 +116,7 @@ private struct ExpandedRailContent: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            let infos = manager.enabledProviderInfos
+            let infos = manager.railProviderInfos
             ForEach(Array(infos.enumerated()), id: \.element.id) { index, info in
                 logoButton(info: info, index: index)
             }

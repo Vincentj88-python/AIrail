@@ -22,8 +22,26 @@ struct OverlayView: View {
     private func content(info: ProviderInfo, snapshot: UsageSnapshot?) -> some View {
         VStack(alignment: .leading, spacing: 20) {
             header(info: info, snapshot: snapshot)
+            if let notice = notice(info: info, snapshot: snapshot) {
+                notice
+            }
             sessionSection(info: info, snapshot: snapshot)
-            sparklineSection(info: info, snapshot: snapshot)
+            if let meters = snapshot?.detail?.meters, !meters.isEmpty {
+                MetersList(meters: meters, color: info.color)
+            }
+            UsageChartSection(
+                detail: snapshot?.detail,
+                fallbackHistory: snapshot?.weeklyHistory ?? [],
+                fallbackDates: snapshot?.historyDates ?? [],
+                color: info.color,
+                sessionWindow: sessionWindow(snapshot: snapshot)
+            )
+            if let detail = snapshot?.detail, detail.hasActivity {
+                if !detail.byModel.isEmpty || !detail.byProject.isEmpty {
+                    UsageBreakdown(detail: detail, color: info.color)
+                }
+                ActivityLine(week: detail.week, tools: detail.topTools)
+            }
             if snapshot?.credits != nil || snapshot?.spend != nil {
                 Divider().overlay(Color.white.opacity(0.08))
                 footer(snapshot: snapshot)
@@ -62,7 +80,7 @@ struct OverlayView: View {
                 pill(text: "\(plan) plan", tint: info.color)
             }
             if let status = snapshot?.status {
-                pill(text: status.rawValue, tint: .gray)
+                StatusPill(status: status)
             }
             Spacer()
             Menu {
@@ -98,11 +116,47 @@ struct OverlayView: View {
             .foregroundStyle(tint == .gray ? Color.secondary : tint)
     }
 
+    // MARK: Notice
+
+    /// One line under the header when the numbers need a caveat: demo data
+    /// with a way to connect, or why a connected account isn't reading.
+    private func notice(info: ProviderInfo, snapshot: UsageSnapshot?) -> AnyView? {
+        guard let snapshot else { return nil }
+        switch snapshot.status {
+        case .demo:
+            return AnyView(
+                HStack(spacing: 8) {
+                    Text("Demo data.")
+                        .foregroundStyle(.secondary)
+                    Button("Connect \(info.displayName)…") {
+                        ui.settingsTab = .accounts
+                        NSApp.activate(ignoringOtherApps: true)
+                        openSettings()
+                    }
+                    .buttonStyle(.link)
+                }
+                .font(.subheadline)
+            )
+        case .stale, .error, .outage:
+            guard let error = manager.lastErrors[info.id] else { return nil }
+            return AnyView(
+                Label(error.errorDescription ?? error.shortDescription, systemImage: "exclamationmark.triangle")
+                    .font(.subheadline)
+                    .foregroundStyle(snapshot.status.tint)
+                    .fixedSize(horizontal: false, vertical: true)
+            )
+        case .ok:
+            return nil
+        }
+    }
+
     // MARK: Session
 
     private func sessionSection(info: ProviderInfo, snapshot: UsageSnapshot?) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            sectionCaption("SESSION USAGE")
+        let hasSession = snapshot?.sessionPercent != nil
+        let period = snapshot?.periodLabel ?? "weekly"
+        return VStack(alignment: .leading, spacing: 14) {
+            sectionCaption(hasSession ? "SESSION USAGE" : "\(period.uppercased()) USAGE")
             HStack(spacing: 26) {
                 sessionRing(info: info, snapshot: snapshot)
                 VStack(alignment: .leading, spacing: 9) {
@@ -116,20 +170,43 @@ struct OverlayView: View {
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                         }
-                        Text("weekly requests")
+                        Text("\(period) requests")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                    } else if hasSession, let weekly = snapshot?.weeklyPercent {
+                        // Providers that report the longer window as a percent only.
+                        HStack(alignment: .firstTextBaseline, spacing: 1) {
+                            Text("\(Int(weekly.rounded()))")
+                                .font(.system(size: 27, weight: .semibold))
+                                .monospacedDigit()
+                            Text("%")
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                        Text("of \(period) limit")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .accessibilityHidden(true)
                     }
-                    if let resetsAt = snapshot?.resetsAt {
-                        Text(UsageFormatting.resetString(resetsAt))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 4)
+                    VStack(alignment: .leading, spacing: 3) {
+                        if hasSession, let resetsAt = snapshot?.resetsAt {
+                            Text("session " + UsageFormatting.resetString(resetsAt))
+                        }
+                        if let weeklyResetsAt = snapshot?.weeklyResetsAt {
+                            Text(period + " " + UsageFormatting.resetString(weeklyResetsAt))
+                        } else if !hasSession, let resetsAt = snapshot?.resetsAt {
+                            Text(UsageFormatting.resetString(resetsAt))
+                        }
                     }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
                     if let lastUpdated = snapshot?.lastUpdated {
                         HStack(spacing: 6) {
-                            Circle().fill(Color.green).frame(width: 6, height: 6)
+                            Circle()
+                                .fill(snapshot?.status.tint ?? .gray)
+                                .frame(width: 6, height: 6)
                             Text("Last updated ")
                                 .foregroundStyle(.secondary)
                                 + Text(UsageFormatting.lastUpdatedString(lastUpdated))
@@ -139,14 +216,15 @@ struct OverlayView: View {
                     }
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Weekly usage")
+                .accessibilityLabel("\(period.capitalized) usage")
                 .accessibilityValue(weeklyAccessibilityValue(snapshot: snapshot))
             }
         }
     }
 
     private func sessionRing(info: ProviderInfo, snapshot: UsageSnapshot?) -> some View {
-        let percent = snapshot?.sessionPercent.map(UsageSnapshot.clampPercent)
+        let percent = snapshot?.ringPercent
+        let label = snapshot?.sessionPercent != nil ? "Session usage" : "\(snapshot?.periodLabel ?? "Weekly") usage"
         return ZStack {
             Circle()
                 .stroke(info.color.opacity(0.18), lineWidth: 9)
@@ -167,27 +245,17 @@ struct OverlayView: View {
         .frame(width: 138, height: 138)
         .padding(5)
         .accessibilityElement()
-        .accessibilityLabel("Session usage")
+        .accessibilityLabel(label)
         .accessibilityValue(percent.map { "\(Int($0.rounded())) percent" } ?? "unknown")
     }
 
-    // MARK: Sparkline
+    // MARK: Chart
 
-    private func sparklineSection(info: ProviderInfo, snapshot: UsageSnapshot?) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            sectionCaption("USAGE (7 DAYS)")
-            if let snapshot, snapshot.weeklyHistory.count == 7 {
-                Sparkline(
-                    values: snapshot.weeklyHistory,
-                    dates: snapshot.historyDates,
-                    color: info.color
-                )
-            } else {
-                Text("No history yet")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-        }
+    /// The rolling 5-hour window the session ring measures, ending at the
+    /// reported reset time. Only providers with a session concept have one.
+    private func sessionWindow(snapshot: UsageSnapshot?) -> DateInterval? {
+        guard let snapshot, snapshot.sessionPercent != nil, let resetsAt = snapshot.resetsAt else { return nil }
+        return DateInterval(start: resetsAt.addingTimeInterval(-5 * 3600), end: resetsAt)
     }
 
     // MARK: Footer
@@ -253,10 +321,14 @@ struct OverlayView: View {
     }
 
     private func weeklyAccessibilityValue(snapshot: UsageSnapshot?) -> String {
-        guard let used = snapshot?.weeklyUsed, let limit = snapshot?.weeklyLimit else {
-            return "unknown"
+        let period = snapshot?.periodLabel ?? "weekly"
+        if let used = snapshot?.weeklyUsed, let limit = snapshot?.weeklyLimit {
+            return "\(Int(used)) of \(Int(limit)) \(period) requests"
         }
-        return "\(Int(used)) of \(Int(limit)) weekly requests"
+        if let percent = snapshot?.weeklyPercent {
+            return "\(Int(percent.rounded())) percent of \(period) limit"
+        }
+        return "unknown"
     }
 
     private func spendAccessibilityValue(snapshot: UsageSnapshot?, spend: Double) -> String {

@@ -10,6 +10,7 @@ struct ProviderInfo: Identifiable, Sendable {
     let symbolName: String
     let brandIconPath: String?
     let installed: Bool
+    let connection: ConnectionMethod
 }
 
 @MainActor
@@ -18,8 +19,13 @@ final class ProviderManager: ObservableObject {
     let allProviderInfos: [ProviderInfo]
 
     @Published private(set) var snapshots: [String: UsageSnapshot] = [:]
+    /// Why the latest read of a connected account failed, by provider id.
+    @Published private(set) var lastErrors: [String: ConnectionError] = [:]
+    @Published private(set) var refreshingIds: Set<String> = []
 
     private let settings: AppSettings
+    private var demoEngines: [String: MockUsageEngine] = [:]
+    private var lastLive: [String: UsageSnapshot] = [:]
     private var timer: Timer?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -34,18 +40,12 @@ final class ProviderManager: ObservableObject {
                 color: $0.color,
                 symbolName: $0.symbolName,
                 brandIconPath: $0.brandIconPath,
-                installed: $0.isInstalled()
+                installed: $0.isInstalled(),
+                connection: $0.connection
             )
         }
-
-        // First launch: enable only the tools detected on this Mac, so users
-        // of one or two AIs don't stare at six logos. Falls back to all six
-        // when nothing is detected; Settings toggles override from then on.
-        if settings.enabledProvidersWereDefaulted {
-            let detected = allProviderInfos.filter { $0.installed }.map { $0.id }
-            if !detected.isEmpty {
-                settings.enabledProviderIds = Set(detected)
-            }
+        for provider in providers {
+            demoEngines[provider.id] = MockUsageEngine(profile: provider.demoProfile)
         }
 
         settings.$refreshInterval
@@ -61,14 +61,37 @@ final class ProviderManager: ObservableObject {
             CursorProvider(),
             ClaudeProvider(),
             CodexProvider(),
-            ChatGPTProvider(),
             GeminiProvider(),
             CopilotProvider(),
         ]
     }
 
-    var enabledProviderInfos: [ProviderInfo] {
-        allProviderInfos.filter { settings.isEnabled($0.id) }
+    // MARK: Membership
+
+    /// True until the first account is connected: the rail then shows demo
+    /// data for the tools found on this Mac so it isn't empty.
+    var isShowingDemo: Bool {
+        !settings.hasConnectedAccounts
+    }
+
+    /// What the rail displays: connected accounts the user hasn't hidden, or
+    /// the demo set while nothing is connected.
+    var railProviderInfos: [ProviderInfo] {
+        if isShowingDemo { return demoProviderInfos }
+        return allProviderInfos.filter { settings.isShownOnRail($0.id) }
+    }
+
+    var demoProviderInfos: [ProviderInfo] {
+        let detected = allProviderInfos.filter(\.installed)
+        return detected.isEmpty ? allProviderInfos : detected
+    }
+
+    var connectedProviderInfos: [ProviderInfo] {
+        allProviderInfos.filter { settings.isConnected($0.id) }
+    }
+
+    var connectableProviderInfos: [ProviderInfo] {
+        allProviderInfos.filter { !settings.isConnected($0.id) }
     }
 
     func providerInfo(for id: String) -> ProviderInfo? {
@@ -79,14 +102,84 @@ final class ProviderManager: ObservableObject {
         snapshots[id]
     }
 
+    private func provider(for id: String) -> (any UsageProviding)? {
+        providers.first { $0.id == id }
+    }
+
+    // MARK: Accounts
+
+    /// Connecting is a real read: the account joins the list only once its
+    /// sign-in has been found and used successfully.
+    func connect(_ providerId: String) async throws {
+        guard let provider = provider(for: providerId) else { return }
+        refreshingIds.insert(providerId)
+        defer { refreshingIds.remove(providerId) }
+        let snapshot = try await provider.fetchUsage()
+        let wasDemo = isShowingDemo
+        settings.connect(providerId)
+        lastLive[providerId] = snapshot
+        snapshots[providerId] = snapshot
+        lastErrors[providerId] = nil
+        if wasDemo {
+            // Demo numbers for the other providers are no longer shown anywhere.
+            snapshots = snapshots.filter { settings.isConnected($0.key) }
+        }
+    }
+
+    func disconnect(_ providerId: String) {
+        settings.disconnect(providerId)
+        snapshots[providerId] = nil
+        lastLive[providerId] = nil
+        lastErrors[providerId] = nil
+        if isShowingDemo {
+            Task { await refreshAll() }
+        }
+    }
+
+    // MARK: Refresh
+
     func start() {
         Task { await refreshAll() }
         restartTimer(interval: settings.refreshInterval)
     }
 
+    /// Providers refresh concurrently so one slow endpoint can't hold up the rest.
     func refreshAll() async {
-        for provider in providers {
-            snapshots[provider.id] = await provider.fetchUsage()
+        let tasks = providers.map(\.id).map { id in
+            Task { @MainActor in await self.refresh(id) }
+        }
+        for task in tasks {
+            await task.value
+        }
+    }
+
+    func refresh(_ providerId: String) async {
+        guard let provider = provider(for: providerId) else { return }
+        if settings.isConnected(providerId) {
+            refreshingIds.insert(providerId)
+            defer { refreshingIds.remove(providerId) }
+            do {
+                let snapshot = try await provider.fetchUsage()
+                lastLive[providerId] = snapshot
+                snapshots[providerId] = snapshot
+                lastErrors[providerId] = nil
+            } catch {
+                let failure = (error as? ConnectionError) ?? .unreadable(error.localizedDescription)
+                lastErrors[providerId] = failure
+                // Keep the last real reading on screen when the failure is
+                // just "couldn't refresh"; blank it when the sign-in is gone.
+                if failure.isTransient, let previous = lastLive[providerId] {
+                    snapshots[providerId] = previous.marking(.stale)
+                } else {
+                    snapshots[providerId] = .empty(
+                        providerId: providerId, displayName: provider.displayName, status: .error
+                    )
+                }
+            }
+        } else if isShowingDemo {
+            snapshots[providerId] = demoEngines[providerId]?.snapshot(
+                providerId: providerId, displayName: provider.displayName
+            )
         }
     }
 

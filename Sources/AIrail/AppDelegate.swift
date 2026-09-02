@@ -36,6 +36,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         rail.show()
         providerManager.start()
 
+        if let providerId = LaunchOptions.overlayProviderId {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak overlay] in
+                overlay?.toggle(providerId: providerId)
+            }
+        }
+
         settings.$railSide
             .dropFirst()
             .sink { [weak self] _ in
@@ -44,15 +50,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
-        settings.$enabledProviderIds
-            .dropFirst()
-            .sink { [weak self] enabled in
-                if let selected = self?.uiState.selectedProviderId, !enabled.contains(selected) {
-                    self?.overlayController?.close()
-                }
-                self?.railController?.reposition() // rail height follows provider count
+        // Rail membership follows the connected accounts and their show-on-rail toggles.
+        Publishers.Merge(
+            settings.$connectedAccountIds.dropFirst().map { _ in () },
+            settings.$hiddenFromRailIds.dropFirst().map { _ in () }
+        )
+        .receive(on: RunLoop.main)
+        .sink { [weak self] in
+            guard let self else { return }
+            let shown = Set(providerManager.railProviderInfos.map(\.id))
+            if let selected = uiState.selectedProviderId, !shown.contains(selected) {
+                overlayController?.close()
             }
-            .store(in: &cancellables)
+            railController?.reposition() // rail height follows provider count
+        }
+        .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .receive(on: RunLoop.main)

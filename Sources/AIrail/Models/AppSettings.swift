@@ -13,10 +13,11 @@ final class AppSettings: ObservableObject {
         static let railSide = "railSide"
         static let autoHideDelay = "autoHideDelay"
         static let refreshInterval = "refreshInterval"
-        static let enabledProviders = "enabledProviders"
+        static let connectedAccounts = "connectedAccounts"
+        static let hiddenFromRail = "hiddenFromRail"
     }
 
-    static let allProviderIds = ["cursor", "claude", "codex", "chatgpt", "gemini", "copilot"]
+    static let allProviderIds = ["cursor", "claude", "codex", "gemini", "copilot"]
 
     @Published var railSide: RailSide {
         didSet { defaults.set(railSide.rawValue, forKey: Key.railSide) }
@@ -27,13 +28,16 @@ final class AppSettings: ObservableObject {
     @Published var refreshInterval: Double {
         didSet { defaults.set(refreshInterval, forKey: Key.refreshInterval) }
     }
-    @Published var enabledProviderIds: Set<String> {
-        didSet { defaults.set(Array(enabledProviderIds).sorted(), forKey: Key.enabledProviders) }
+    /// Accounts the user has connected. Only ids in here are ever read live;
+    /// with none connected the rail falls back to demo data.
+    @Published var connectedAccountIds: Set<String> {
+        didSet { defaults.set(Array(connectedAccountIds).sorted(), forKey: Key.connectedAccounts) }
     }
-
-    /// True when no stored provider selection existed yet — the manager then
-    /// narrows the default to the tools actually detected on this Mac.
-    private(set) var enabledProvidersWereDefaulted = false
+    /// Connected accounts the user has taken off the rail (still refreshed,
+    /// still listed in Settings).
+    @Published var hiddenFromRailIds: Set<String> {
+        didSet { defaults.set(Array(hiddenFromRailIds).sorted(), forKey: Key.hiddenFromRail) }
+    }
 
     private let defaults: UserDefaults
 
@@ -42,23 +46,39 @@ final class AppSettings: ObservableObject {
         railSide = RailSide(rawValue: defaults.string(forKey: Key.railSide) ?? "") ?? .left
         autoHideDelay = defaults.object(forKey: Key.autoHideDelay) as? Double ?? 0.3
         refreshInterval = defaults.object(forKey: Key.refreshInterval) as? Double ?? 60
-        if let stored = defaults.stringArray(forKey: Key.enabledProviders) {
-            enabledProviderIds = Set(stored)
-        } else {
-            enabledProviderIds = Set(Self.allProviderIds)
-            enabledProvidersWereDefaulted = true
-        }
+        connectedAccountIds = Set(defaults.stringArray(forKey: Key.connectedAccounts) ?? [])
+        hiddenFromRailIds = Set(defaults.stringArray(forKey: Key.hiddenFromRail) ?? [])
+        // v0.1 stored "enabled providers"; accounts replaced that concept.
+        defaults.removeObject(forKey: "enabledProviders")
     }
 
-    func isEnabled(_ providerId: String) -> Bool {
-        enabledProviderIds.contains(providerId)
+    var hasConnectedAccounts: Bool {
+        !connectedAccountIds.isEmpty
     }
 
-    func setEnabled(_ enabled: Bool, providerId: String) {
-        if enabled {
-            enabledProviderIds.insert(providerId)
+    func isConnected(_ providerId: String) -> Bool {
+        connectedAccountIds.contains(providerId)
+    }
+
+    func connect(_ providerId: String) {
+        connectedAccountIds.insert(providerId)
+        hiddenFromRailIds.remove(providerId)
+    }
+
+    func disconnect(_ providerId: String) {
+        connectedAccountIds.remove(providerId)
+        hiddenFromRailIds.remove(providerId)
+    }
+
+    func isShownOnRail(_ providerId: String) -> Bool {
+        isConnected(providerId) && !hiddenFromRailIds.contains(providerId)
+    }
+
+    func setShownOnRail(_ shown: Bool, providerId: String) {
+        if shown {
+            hiddenFromRailIds.remove(providerId)
         } else {
-            enabledProviderIds.remove(providerId)
+            hiddenFromRailIds.insert(providerId)
         }
     }
 }

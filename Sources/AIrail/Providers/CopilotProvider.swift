@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 @MainActor
@@ -8,22 +9,176 @@ final class CopilotProvider: UsageProviding {
     let symbolName = "cpu"
     let brandIconPath: String? = BrandIcons.copilot
 
-    private let mock = MockUsageEngine(profile: .init(
-        plan: "Pro",
-        sessionStart: 18,
-        weeklyLimit: 300,
-        weeklyStart: 22,
-        credits: nil,
-        spend: nil,
-        spendCap: nil
-    ))
+    let connection = ConnectionMethod(
+        toolName: "GitHub CLI",
+        summary: "Uses your GitHub CLI sign-in",
+        explainer: "AIrail asks the GitHub CLI (gh) for the token it is signed in with and uses it to read your Copilot quota from GitHub — premium requests used this month, your plan, and when the quota resets. If gh isn't installed, the Copilot editor extension's saved sign-in is used instead. Nothing is written back."
+    )
+
+    let demoProfile = MockUsageEngine.Profile(
+        plan: "Pro", sessionStart: 18, weeklyLimit: 300, weeklyStart: 22,
+        credits: nil, spend: nil, spendCap: nil,
+        demoModels: ["gpt-5.5", "claude-sonnet-5"]
+    )
+
+    private static let quotaURL = URL(string: "https://api.github.com/copilot_internal/user")!
+    private static let extensionAppsPath = NSHomeDirectory() + "/.config/github-copilot/apps.json"
+
+    private var token: String?
 
     func isInstalled() -> Bool {
         InstallDetection.onPath("gh")
-            || InstallDetection.anyExists(["Library/Application Support/GitHub Copilot"])
+            || InstallDetection.anyExists([".config/github-copilot", "Library/Application Support/GitHub Copilot"])
     }
 
-    func fetchUsage() async -> UsageSnapshot {
-        mock.snapshot(providerId: id, displayName: displayName)
+    func fetchUsage() async throws -> UsageSnapshot {
+        let token = try await loadToken()
+        let data: Data
+        do {
+            data = try await HTTPClient.authorizedGet(
+                Self.quotaURL,
+                headers: ["Authorization": "token \(token)", "Accept": "application/json"],
+                tool: connection.toolName
+            )
+        } catch ConnectionError.expired(let tool) {
+            self.token = nil
+            throw ConnectionError.expired(tool: tool)
+        }
+        let report = try CopilotUsage.parse(data)
+        return CopilotUsage.snapshot(report: report, providerId: id, displayName: displayName)
     }
+
+    private func loadToken() async throws -> String {
+        if let token { return token }
+        let fresh: String
+        if let gh = CommandRunner.locate("gh") {
+            let result = try await CommandRunner.run(gh, arguments: ["auth", "token"])
+            guard result.exitCode == 0, !result.stdout.isEmpty else {
+                throw ConnectionError.notSignedIn(tool: connection.toolName)
+            }
+            fresh = result.stdout
+        } else if let data = FileManager.default.contents(atPath: Self.extensionAppsPath),
+                  let saved = CopilotUsage.extensionToken(from: data) {
+            fresh = saved
+        } else {
+            throw ConnectionError.notInstalled(tool: connection.toolName)
+        }
+        token = fresh
+        return fresh
+    }
+}
+
+enum CopilotUsage {
+    struct Report: Sendable {
+        var plan: String?
+        var login: String?
+        var meter: String
+        var used: Double?
+        var limit: Double?
+        var percentUsed: Double
+        var unlimited: Bool
+        var resetsAt: Date?
+        /// Every meter GitHub reports, for the overlay's meter list.
+        var meters: [UsageMeter] = []
+    }
+
+    /// `apps.json` from the editor extension: `{"github.com:<client>": {"user": …, "oauth_token": …}}`.
+    static func extensionToken(from data: Data) -> String? {
+        guard let json = try? JSONObject(data: data) else { return nil }
+        for key in json.raw.keys.sorted() where key.hasPrefix("github.com") {
+            if let token = json[key]?.string("oauth_token"), !token.isEmpty {
+                return token
+            }
+        }
+        return nil
+    }
+
+    /// `quota_snapshots` has one meter per feature. Premium requests are the
+    /// one people run out of; plans without any fall back to the chat meter.
+    static func parse(_ data: Data) throws -> Report {
+        let json = try JSONObject(data: data)
+        guard let snapshots = json["quota_snapshots"] else {
+            throw ConnectionError.unreadable("no quota in response")
+        }
+        let premium = snapshots["premium_interactions"]
+        let hasPremium = premium.map {
+            $0.bool("unlimited") == true || ($0.double("entitlement") ?? 0) > 0
+        } ?? false
+        let meterName = hasPremium ? "premium_interactions" : "chat"
+        guard let meter = snapshots[meterName] else {
+            throw ConnectionError.unreadable("no usable quota meter")
+        }
+        let unlimited = meter.bool("unlimited") ?? false
+        let entitlement = meter.double("entitlement")
+        let remaining = meter.double("remaining")
+        let percentRemaining = meter.double("percent_remaining") ?? (unlimited ? 100 : 0)
+        let meters: [UsageMeter] = [
+            ("premium_interactions", "Premium requests"),
+            ("chat", "Chat"),
+            ("completions", "Completions"),
+        ].compactMap { key, label in
+            guard let quota = snapshots[key] else { return nil }
+            let isUnlimited = quota.bool("unlimited") ?? false
+            let entitlement = quota.double("entitlement") ?? 0
+            guard isUnlimited || entitlement > 0 else { return nil }
+            let remaining = quota.double("remaining") ?? 0
+            return UsageMeter(
+                name: label,
+                percent: isUnlimited ? nil : UsageSnapshot.clampPercent(100 - (quota.double("percent_remaining") ?? 0)),
+                used: isUnlimited ? nil : max(0, entitlement - remaining),
+                limit: isUnlimited ? nil : entitlement,
+                note: isUnlimited ? "Unlimited" : nil
+            )
+        }
+        return Report(
+            plan: planLabel(json.string("copilot_plan")),
+            login: json.string("login"),
+            meter: meterName == "chat" ? "chat" : "premium",
+            used: unlimited ? nil : zip(entitlement, remaining).map { max(0, $0 - $1) },
+            limit: unlimited ? nil : entitlement,
+            percentUsed: UsageSnapshot.clampPercent(100 - percentRemaining),
+            unlimited: unlimited,
+            resetsAt: DateParsing.iso8601(json.string("quota_reset_date_utc"))
+                ?? DateParsing.day(json.string("quota_reset_date")),
+            meters: meters
+        )
+    }
+
+    static func planLabel(_ raw: String?) -> String? {
+        guard let raw, !raw.isEmpty else { return nil }
+        switch raw {
+        case "pro_plus": return "Pro+"
+        default: return raw.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+
+    static func snapshot(report: Report, providerId: String, displayName: String, now: Date = Date()) -> UsageSnapshot {
+        UsageSnapshot(
+            providerId: providerId,
+            displayName: displayName,
+            sessionUsed: nil,
+            sessionLimit: nil,
+            sessionPercent: nil,
+            weeklyUsed: report.used,
+            weeklyLimit: report.limit,
+            weeklyPercent: report.unlimited ? nil : report.percentUsed,
+            resetsAt: nil,
+            credits: nil,
+            spend: nil,
+            spendCap: nil,
+            plan: report.plan,
+            status: .ok,
+            lastUpdated: now,
+            weeklyHistory: [],
+            periodLabel: report.meter == "chat" ? "monthly chat" : "monthly premium",
+            weeklyResetsAt: report.resetsAt,
+            account: report.login,
+            detail: UsageDetail(meters: report.meters)
+        )
+    }
+}
+
+private func zip<A, B>(_ a: A?, _ b: B?) -> (A, B)? {
+    guard let a, let b else { return nil }
+    return (a, b)
 }

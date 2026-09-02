@@ -6,7 +6,11 @@ struct AIrailApp: App {
 
     var body: some Scene {
         Settings {
-            SettingsView(settings: delegate.settings, manager: delegate.providerManager)
+            SettingsView(
+                settings: delegate.settings,
+                manager: delegate.providerManager,
+                ui: delegate.uiState
+            )
         }
     }
 }
