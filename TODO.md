@@ -168,6 +168,13 @@ placement can't disagree; `applyPosition(resettling:)` now also runs after a
 transient self-heals. Verified: built-in+notch → window at the notch (x4230),
 not the left edge (x3440).
 
+## Collapsed rail was full-height (2026-09-02)
+
+The collapsed hairline used the same frame as the expanded card (only width
+changed), so the idle line ran ~38% of screen height. Split the heights in
+`RailWindow.frame(expanded:)`: expanded fits the card; collapsed is a compact
+168 pt centred hover strip that grows to the card on hover.
+
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).

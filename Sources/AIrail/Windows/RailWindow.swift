@@ -142,14 +142,18 @@ final class RailWindowController {
             return .zero
         }
         let visible = screen.visibleFrame
-        // Unobtrusive: ~38% of the screen, but always tall enough for the
-        // expanded card. Each cell is a 44 pt mark plus a two-line caption
-        // (name + percent, ~31 pt); 16 pt gaps; 32 pt vertical card padding.
+        // Expanded fits the card exactly: each cell is a 44 pt mark plus a
+        // two-line caption (name + percent, ~31 pt); 16 pt gaps; card padding.
         let count = max(1, manager.railProviderInfos.count)
         let cellHeight: CGFloat = 44 + 5 + 31
-        let contentHeight = CGFloat(count) * cellHeight + CGFloat(count - 1) * 16 + 32 + 24
-        var height = max(contentHeight, (visible.height * 0.38).rounded())
-        height = min(height, visible.height - 20)
+        let expandedHeight = min(
+            CGFloat(count) * cellHeight + CGFloat(count - 1) * 16 + 32 + 24,
+            visible.height - 20
+        )
+        // Collapsed is just a compact hover strip — a short centred hairline,
+        // not a full-height line. It grows to the card height on hover.
+        let collapsedHeight = min(expandedHeight, 168)
+        let height = (expanded ? expandedHeight : collapsedHeight).rounded()
         let y = (visible.midY - height / 2).rounded()
         let width: CGFloat = expanded ? expandedWidth : collapsedWidth
         let x = settings.railSide == .left ? visible.minX : visible.maxX - width
