@@ -12,6 +12,8 @@ struct NotchView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openSettings) private var openSettings
 
+    @State private var hoveredId: String?
+
     private var expandAnimation: Animation {
         reduceMotion ? .easeInOut(duration: 0.18) : .spring(response: 0.42, dampingFraction: 0.7)
     }
@@ -89,16 +91,55 @@ struct NotchView: View {
     private var island: some View {
         VStack(spacing: 0) {
             Color.clear.frame(height: ui.notchSize.height)
-            NotchMarksRow(manager: manager, ui: ui, reduceMotion: reduceMotion, onSelect: onSelect)
-                .padding(.horizontal, NotchWindowController.islandPadding)
-                .padding(.top, 6)
-                .padding(.bottom, 12)
-                .frame(maxHeight: .infinity)
+            VStack(spacing: 3) {
+                NotchMarksRow(
+                    manager: manager,
+                    ui: ui,
+                    reduceMotion: reduceMotion,
+                    hoveredId: $hoveredId,
+                    onSelect: onSelect
+                )
+                caption
+            }
+            .padding(.horizontal, NotchWindowController.islandPadding)
+            .padding(.top, 6)
+            .padding(.bottom, 9)
+            .frame(maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity)
         .background(islandShape.fill(Color.black))
         .overlay(islandShape.strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
         .shadow(color: .black.opacity(0.45), radius: 16, y: 6)
+    }
+
+    /// Reveals the pointed-at (or open) provider's name and percent, the way
+    /// the Dynamic Island shows detail. A fixed-height row so the marks above
+    /// it never jump; it simply fades in.
+    private var caption: some View {
+        let id = hoveredId ?? ui.selectedProviderId
+        let info = id.flatMap { manager.providerInfo(for: $0) }
+        let snapshot = id.flatMap { manager.snapshot(for: $0) }
+        return HStack(spacing: 6) {
+            if let info {
+                Text(info.displayName)
+                    .foregroundStyle(.white.opacity(0.9))
+                if let percent = snapshot?.ringPercent {
+                    Text("\(Int(percent.rounded()))%")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(info.color)
+                } else if let plan = snapshot?.plan {
+                    Text(plan)
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+            }
+        }
+        .font(.system(size: 11, weight: .medium))
+        .monospacedDigit()
+        .lineLimit(1)
+        .frame(height: 14)
+        .opacity(info == nil ? 0 : 1)
+        .animation(.easeOut(duration: 0.15), value: id)
+        .accessibilityHidden(true)
     }
 
     /// Flush with the top of the screen, rounded where it meets the desktop.
@@ -124,10 +165,10 @@ private struct NotchMarksRow: View {
     @ObservedObject var manager: ProviderManager
     @ObservedObject var ui: RailUIState
     var reduceMotion: Bool
+    @Binding var hoveredId: String?
     var onSelect: (String) -> Void
 
     @State private var appeared = false
-    @State private var hoveredProviderId: String?
 
     var body: some View {
         HStack(spacing: NotchWindowController.markSpacing) {
@@ -141,7 +182,7 @@ private struct NotchMarksRow: View {
 
     private func mark(info: ProviderInfo, index: Int) -> some View {
         let snapshot = manager.snapshot(for: info.id)
-        let isHovered = hoveredProviderId == info.id && !reduceMotion
+        let isHovered = hoveredId == info.id && !reduceMotion
         return Button {
             onSelect(info.id)
         } label: {
@@ -160,9 +201,9 @@ private struct NotchMarksRow: View {
         .animation(.spring(response: 0.25, dampingFraction: 0.6), value: isHovered)
         .onHover { hovering in
             if hovering {
-                hoveredProviderId = info.id
-            } else if hoveredProviderId == info.id {
-                hoveredProviderId = nil
+                hoveredId = info.id
+            } else if hoveredId == info.id {
+                hoveredId = nil
             }
         }
         .opacity(appeared ? 1 : 0)

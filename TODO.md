@@ -107,6 +107,14 @@ track so the gauge always reads as a full circle, a clean `Color(white:0.13)`
 chip instead of the frosted disc (muddy on black), heavier glyph. Island body
 tightened (`markSize + 18`). Rail/overlay marks unchanged (glass path kept).
 
+## Percent-on-hover (2026-09-02)
+
+Island now reveals the pointed-at provider's name + ring percent (or plan) in a
+caption line under the marks — `hoveredId` hoisted from `NotchMarksRow` into
+`NotchView`, caption row is fixed-height so the marks never jump, fades on the
+id change. `islandBodyHeight` grew to `markSize + 32` to seat it. Falls back to
+the selected provider when the overlay is open.
+
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).
