@@ -65,9 +65,9 @@ struct NotchView: View {
         VStack(spacing: 0) {
             Group {
                 if ui.notchIsVirtual {
-                    NotchPillShape()
-                        .fill(Color.black)
+                    islandBackground(NotchPillShape())
                         .overlay(NotchPillShape().stroke(Color.white.opacity(0.1), lineWidth: 1))
+                        .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
                 } else {
                     Color.clear
                 }
@@ -110,9 +110,23 @@ struct NotchView: View {
         // Inset so the body sits inside the flare room the window reserves.
         .padding(.horizontal, NotchWindowController.islandFlare)
         .frame(maxWidth: .infinity)
-        .background(islandShape.fill(Color.black))
+        .background(islandBackground(islandShape))
         .overlay(islandShape.stroke(Color.white.opacity(0.1), lineWidth: 1))
-        .shadow(color: .black.opacity(0.5), radius: 18, y: 7)
+        // A tight shadow that grounds the lower edge without hazing the desktop.
+        .shadow(color: .black.opacity(ui.notchIsVirtual ? 0.3 : 0.28), radius: ui.notchIsVirtual ? 10 : 6, y: 4)
+    }
+
+    /// On a real notch the island is OLED black to merge with the physical
+    /// cut-out; on a drawn Island it's the frosted dark glass of the rail and
+    /// overlay, so the wallpaper shows faintly through.
+    @ViewBuilder
+    private func islandBackground(_ shape: some Shape) -> some View {
+        if ui.notchIsVirtual {
+            shape.fill(.ultraThinMaterial)
+                .overlay(shape.fill(Color.black.opacity(0.24)))
+        } else {
+            shape.fill(Color.black)
+        }
     }
 
     /// Reveals the pointed-at (or open) provider's name and percent, the way

@@ -115,14 +115,14 @@ private struct ExpandedRailContent: View {
     @State private var hoveredProviderId: String?
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 16) {
             let infos = manager.railProviderInfos
             ForEach(Array(infos.enumerated()), id: \.element.id) { index, info in
                 logoButton(info: info, index: index)
             }
         }
         .padding(.vertical, 16)
-        .padding(.horizontal, 9)
+        .padding(.horizontal, 10)
         .background(card)
         .shadow(
             color: .black.opacity(0.35),
@@ -136,35 +136,48 @@ private struct ExpandedRailContent: View {
     private func logoButton(info: ProviderInfo, index: Int) -> some View {
         let snapshot = manager.snapshot(for: info.id)
         let isHovered = hoveredProviderId == info.id && !reduceMotion
-        return Button {
-            onSelect(info.id)
-        } label: {
-            LogoMark(
-                color: info.color,
-                symbolName: info.symbolName,
-                brandIconPath: info.brandIconPath,
-                percent: snapshot?.ringPercent,
-                size: 44,
-                isSelected: ui.selectedProviderId == info.id
-            )
-        }
-        .buttonStyle(.plain)
-        // Dock-style magnification on hover.
-        .scaleEffect(isHovered ? 1.16 : 1)
-        .animation(.spring(response: 0.25, dampingFraction: 0.6), value: isHovered)
-        .onHover { hovering in
-            if hovering {
-                hoveredProviderId = info.id
-            } else if hoveredProviderId == info.id {
-                hoveredProviderId = nil
+        return VStack(spacing: 5) {
+            Button {
+                onSelect(info.id)
+            } label: {
+                LogoMark(
+                    color: info.color,
+                    symbolName: info.symbolName,
+                    brandIconPath: info.brandIconPath,
+                    percent: snapshot?.ringPercent,
+                    size: 44,
+                    isSelected: ui.selectedProviderId == info.id
+                )
             }
+            .buttonStyle(.plain)
+            // Dock-style magnification on hover, on the mark only.
+            .scaleEffect(isHovered ? 1.16 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: isHovered)
+            .onHover { hovering in
+                if hovering {
+                    hoveredProviderId = info.id
+                } else if hoveredProviderId == info.id {
+                    hoveredProviderId = nil
+                }
+            }
+            VStack(spacing: 1) {
+                Text(info.displayName)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.92))
+                Text(snapshot?.ringPercent.map { "\(Int($0.rounded()))%" } ?? "—")
+                    .font(.system(size: 10.5, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .monospacedDigit()
+            }
+            .lineLimit(1)
         }
-        // Staggered entrance: each logo pops in slightly after the previous.
+        // Staggered entrance: each cell pops in slightly after the previous.
         .opacity(appeared ? 1 : 0)
-        .scaleEffect(appeared || reduceMotion ? 1 : 0.4)
+        .scaleEffect(appeared || reduceMotion ? 1 : 0.4, anchor: .center)
         .offset(x: appeared || reduceMotion ? 0 : (settings.railSide == .left ? -14 : 14))
         .animation(entranceAnimation(index: index), value: appeared)
         .help(helpText(info: info, snapshot: snapshot))
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(info.displayName)
         .accessibilityValue(
             snapshot?.ringPercent.map { "\(Int($0.rounded())) percent used" } ?? "no data"

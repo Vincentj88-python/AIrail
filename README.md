@@ -48,7 +48,7 @@ The rail shows your connected accounts (each has a *Show on rail* switch) and si
 
 On a MacBook with a notch, **Settings › Rail › Position › Notch** folds the rail into it, Dynamic Island-style: idle, a hairline cascades under the notch; hover, and the notch grows down into a black island holding the marks and rings; click, and the HUD hangs beneath it. It uses the notch geometry macOS reports (`safeAreaInsets`, `auxiliaryTopLeft/RightArea`), works over full-screen apps, and falls back to the left edge whenever no notched display is attached (clamshell, external-only).
 
-Displays without a notch get **Island** instead: the same look with a small black pill drawn at the top centre of the menu bar, hairline beneath, growing into the marks on hover. Pick the display first, then the position — Notch is offered for the built-in display, Island for the others. Point at a mark and its name and percent reveal in a caption line beneath, the way the Dynamic Island shows detail.
+Displays without a notch get **Island** instead: the same look, drawn in the app's frosted dark glass (the wallpaper shows faintly through) with a small pill at the top centre of the menu bar, hairline beneath, growing into the marks on hover. Pick the display first, then the position — Notch is offered for the built-in display, Island for the others. Point at a mark and its name and percent reveal in a caption line beneath, the way the Dynamic Island shows detail.
 
 ## The card
 

@@ -39,7 +39,7 @@ final class RailWindowController {
     private var collapseTask: Task<Void, Never>?
 
     private let collapsedWidth: CGFloat = 10
-    private let expandedWidth: CGFloat = 88
+    private let expandedWidth: CGFloat = 108
 
     init(settings: AppSettings, manager: ProviderManager, ui: RailUIState) {
         self.settings = settings
@@ -143,9 +143,11 @@ final class RailWindowController {
         }
         let visible = screen.visibleFrame
         // Unobtrusive: ~38% of the screen, but always tall enough for the
-        // expanded card (44 pt logos + 14 pt gaps + card padding + margin).
+        // expanded card. Each cell is a 44 pt mark plus a two-line caption
+        // (name + percent, ~31 pt); 16 pt gaps; 32 pt vertical card padding.
         let count = max(1, manager.railProviderInfos.count)
-        let contentHeight = CGFloat(count) * 44 + CGFloat(count - 1) * 14 + 32 + 24
+        let cellHeight: CGFloat = 44 + 5 + 31
+        let contentHeight = CGFloat(count) * cellHeight + CGFloat(count - 1) * 16 + 32 + 24
         var height = max(contentHeight, (visible.height * 0.38).rounded())
         height = min(height, visible.height - 20)
         let y = (visible.midY - height / 2).rounded()

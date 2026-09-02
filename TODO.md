@@ -129,6 +129,17 @@ beat AFTER the shape settles (currently they scale with the container plus
 their own entrance stagger), and/or a matched-geometry morph from pill to
 island rather than a crossfade.
 
+## Style pass toward the renders (2026-09-02)
+
+- Island is now the app's frosted dark glass on a drawn Island (matches the
+  `renders/` panels), and stays OLED black only on a real hardware notch so it
+  merges with the cut-out — `NotchView.islandBackground` switches on
+  `ui.notchIsVirtual`. Fixed the "shade": the island's drop shadow was radius
+  18 / 50% black (a haze on the desktop); now a tight radius-6/10 shadow.
+- Expanded edge rail shows name + percent under each mark again (render #1);
+  `expandedWidth` 88→108, cell height math updated in RailWindow. Hover
+  magnify now applies to the mark only, not the caption.
+
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).
