@@ -31,6 +31,39 @@ enum ScreenSelection {
         }
     }
 
+    static func screen(named name: String) -> NSScreen? {
+        NSScreen.screens.first { $0.localizedName == name }
+    }
+
+    static func hasNotch(_ screen: NSScreen) -> Bool {
+        screen.safeAreaInsets.top > 0
+    }
+
+    /// Whether the Notch position makes sense for a display choice: the
+    /// chosen display must be the one with the notch (Automatic accepts any).
+    static func notchAvailable(preference: String) -> Bool {
+        guard NotchGeometry.notch() != nil else { return false }
+        if preference == automatic { return true }
+        return screen(named: preference).map(hasNotch) ?? false
+    }
+
+    /// The display the pointer would cross onto past the rail's edge, if any —
+    /// the edge is then a seam, not somewhere the pointer can rest.
+    static func neighbour(beyond screen: NSScreen, side: AppSettings.RailSide) -> NSScreen? {
+        let others = NSScreen.screens.filter { $0 != screen }
+        guard let index = neighbourIndex(beyond: screen.frame, side: side, frames: others.map(\.frame)) else { return nil }
+        return others[index]
+    }
+
+    static func neighbourIndex(beyond frame: NSRect, side: AppSettings.RailSide, frames: [NSRect]) -> Int? {
+        frames.firstIndex { other in
+            let touches = side == .left
+                ? abs(other.maxX - frame.minX) < 1
+                : abs(other.minX - frame.maxX) < 1
+            return touches && other.minY < frame.maxY && other.maxY > frame.minY
+        }
+    }
+
     /// Names for the Settings popup, in the order macOS lists the displays.
     static var displayNames: [String] {
         var seen: Set<String> = []

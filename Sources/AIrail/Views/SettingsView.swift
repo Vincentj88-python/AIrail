@@ -80,28 +80,55 @@ private struct RailPane: View {
 
     private var displayNames: [String] { ScreenSelection.displayNames }
 
-    /// Automatic means the outer edge of the whole desktop, so the pointer can
-    /// actually rest on the hairline instead of sliding onto the next display.
-    private var displayFooter: String {
-        let side = settings.railSide == .left ? "left" : "right"
-        let chosen = ScreenSelection.railScreen(preference: settings.railDisplay, side: settings.railSide)?.localizedName ?? "—"
-        if settings.railDisplay == ScreenSelection.automatic {
-            return "Automatic uses the outer \(side) edge of your whole desktop — currently \(chosen) — so the pointer stops on the rail instead of crossing onto the next display."
-        }
-        return "The rail sits on the \(side) edge of \(chosen). If another display continues past that edge, the pointer will cross over it; Automatic avoids that."
+    private var notchAvailable: Bool {
+        ScreenSelection.notchAvailable(preference: settings.railDisplay)
     }
 
-    /// Notch is only offered while a notched display is attached (a stored
-    /// choice still shows so it can be changed).
+    /// Notch is offered only for the display that has one (a stored choice
+    /// still shows so it can be changed).
     private var availablePositions: [AppSettings.RailPosition] {
-        if NotchGeometry.notch() != nil || settings.position == .notch {
-            return AppSettings.RailPosition.allCases
+        notchAvailable || settings.position == .notch ? AppSettings.RailPosition.allCases : [.left, .right]
+    }
+
+    private var displayFooter: String {
+        if settings.railDisplay == ScreenSelection.automatic {
+            let side = settings.railSide == .left ? "left" : "right"
+            let chosen = ScreenSelection.railScreen(preference: settings.railDisplay, side: settings.railSide)?.localizedName ?? "—"
+            return "Automatic uses the outer \(side) edge of your whole desktop — currently \(chosen) — so the pointer stops on the rail instead of crossing onto the next display."
         }
-        return [.left, .right]
+        if let screen = ScreenSelection.screen(named: settings.railDisplay), ScreenSelection.hasNotch(screen) {
+            return "\(screen.localizedName) has a notch, so Notch is available as a position."
+        }
+        return "Only the MacBook's built-in display has a notch; other displays offer Left and Right."
+    }
+
+    private var positionFooter: String? {
+        guard settings.position != .notch,
+              let screen = ScreenSelection.railScreen(preference: settings.railDisplay, side: settings.railSide),
+              let neighbour = ScreenSelection.neighbour(beyond: screen, side: settings.railSide)
+        else { return nil }
+        return "This edge of \(screen.localizedName) continues onto \(neighbour.localizedName), so the pointer will cross over rather than rest on the rail. Pick the other side, or the display at the outer edge."
     }
 
     var body: some View {
         Form {
+            Section {
+                Picker("Display", selection: $settings.railDisplay) {
+                    Text("Automatic — outer edge").tag(ScreenSelection.automatic)
+                    Divider()
+                    ForEach(displayNames, id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                }
+                .onChange(of: settings.railDisplay) { _, _ in
+                    // Notch only exists on one display; leaving it means an edge.
+                    if settings.position == .notch, !notchAvailable {
+                        settings.position = .left
+                    }
+                }
+            } footer: {
+                Text(displayFooter)
+            }
             Section {
                 Picker("Position", selection: $settings.position) {
                     ForEach(availablePositions) { position in
@@ -110,23 +137,12 @@ private struct RailPane: View {
                 }
                 .pickerStyle(.segmented)
             } footer: {
-                if NotchGeometry.notch() != nil {
-                    Text("Notch folds the rail into the MacBook's notch: a hairline under it, a Dynamic Island-style row of marks on hover. Falls back to the left edge when no notched display is attached.")
+                if settings.position == .notch {
+                    Text("Notch folds the rail into the notch: a hairline under it, a Dynamic Island-style row of marks on hover, the HUD beneath. Falls back to the left edge whenever that display isn't attached.")
+                } else if let positionFooter {
+                    Text(positionFooter)
                 } else {
-                    Text("Notch position appears here when a MacBook display with a notch is attached.")
-                }
-            }
-            if settings.position != .notch, displayNames.count > 1 {
-                Section {
-                    Picker("Display", selection: $settings.railDisplay) {
-                        Text("Automatic").tag(ScreenSelection.automatic)
-                        Divider()
-                        ForEach(displayNames, id: \.self) { name in
-                            Text(name).tag(name)
-                        }
-                    }
-                } footer: {
-                    Text(displayFooter)
+                    Text("Left and Right hug that edge of the chosen display; hover the hairline to expand the rail.")
                 }
             }
             Section {
@@ -144,6 +160,6 @@ private struct RailPane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(height: 230)
+        .frame(height: 360)
     }
 }

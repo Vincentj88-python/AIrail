@@ -100,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Puts the rail on the chosen edge, or into the notch when asked and a
     /// notched display is attached — otherwise the left edge stands in.
     private func applyPosition() {
-        let wantsNotch = settings.position == .notch && NotchGeometry.notch() != nil
+        let wantsNotch = settings.position == .notch && ScreenSelection.notchAvailable(preference: settings.railDisplay)
         if wantsNotch != usingNotch {
             uiState.isExpanded = false
         }

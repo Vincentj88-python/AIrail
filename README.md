@@ -76,7 +76,7 @@ Select the **AIrail** scheme and **Run** (⌘R). The app has no Dock icon — lo
 - **Click** a logo to open the stats HUD; click another logo to swap, press **Escape** or click outside to dismiss.
 - **Right-click** the rail (or use the `…` menu in the HUD) for **Settings…** (⌘,) and **Quit**.
 
-Settings cover accounts (add, remove, show on rail), position (left, right, notch), which display the rail uses (Automatic picks the outer edge of your whole desktop, so the pointer rests on the hairline instead of sliding onto the next display), auto-hide delay, refresh interval, and launch at login.
+Settings cover accounts (add, remove, show on rail), the rail's display and position — pick a display, then Left, Right, or (for the MacBook's built-in display) Notch; Automatic picks the outer edge of your whole desktop so the pointer rests on the hairline instead of sliding onto the next monitor, and the pane warns when a chosen edge is a seam — plus auto-hide delay, refresh interval, and launch at login.
 
 Launch flags for development: `--settings[=accounts]` opens Settings, `--add-account[=other]` opens the Add Account sheet (or its API-key page), `--overlay=<id>` opens the overlay for a provider.
 

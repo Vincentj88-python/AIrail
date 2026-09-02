@@ -151,6 +151,12 @@ final class AIrailTests: XCTestCase {
         let stacked = [NSRect(x: 0, y: 0, width: 1800, height: 1169), NSRect(x: 0, y: 1169, width: 1800, height: 1440)]
         XCTAssertEqual(ScreenSelection.outerIndex(side: .left, frames: stacked), 1)
         XCTAssertNil(ScreenSelection.outerIndex(side: .left, frames: []))
+
+        // Seams: the ultrawide's edges both continue onto another display; the Dell's left and the MacBook's right don't.
+        XCTAssertEqual(ScreenSelection.neighbourIndex(beyond: ultrawide, side: .left, frames: [macbook, dell]), 1)
+        XCTAssertEqual(ScreenSelection.neighbourIndex(beyond: ultrawide, side: .right, frames: [macbook, dell]), 0)
+        XCTAssertNil(ScreenSelection.neighbourIndex(beyond: dell, side: .left, frames: [ultrawide, macbook]))
+        XCTAssertNil(ScreenSelection.neighbourIndex(beyond: macbook, side: .right, frames: [ultrawide, dell]))
     }
 
     @MainActor
