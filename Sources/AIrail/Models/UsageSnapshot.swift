@@ -128,6 +128,17 @@ enum UsageFormatting {
         monthFormatter.string(from: date).uppercased()
     }
 
+    private static let clockFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    /// "at 14:32" for a time later today, "shortly" if it's basically now.
+    static func clockString(_ date: Date, now: Date = Date()) -> String {
+        date.timeIntervalSince(now) < 30 ? "shortly" : "at " + clockFormatter.string(from: date)
+    }
+
     static func lastUpdatedString(_ date: Date, now: Date = Date()) -> String {
         let seconds = now.timeIntervalSince(date)
         if seconds < 10 { return "just now" }

@@ -28,6 +28,7 @@ enum ConnectionError: LocalizedError, Sendable {
     case expired(tool: String)
     case missingKey(platform: String)
     case invalidKey(platform: String, hint: String?)
+    case rateLimited(tool: String, retryAfter: Date?)
     case unreadable(String)
     case network(String)
     case unsupported
@@ -46,6 +47,9 @@ enum ConnectionError: LocalizedError, Sendable {
             return "No API key stored for \(platform). Remove the account and add it again."
         case .invalidKey(let platform, let hint):
             return "\(platform) rejected the API key." + (hint.map { " " + $0 } ?? "")
+        case .rateLimited(let tool, let retryAfter):
+            let when = retryAfter.map { " Trying again " + UsageFormatting.clockString($0) + "." } ?? " Trying again shortly."
+            return "\(tool) is limiting how often usage can be checked." + when
         case .unreadable(let detail):
             return "Couldn't read the local data: \(detail)"
         case .network(let detail):
@@ -64,6 +68,7 @@ enum ConnectionError: LocalizedError, Sendable {
         case .expired(let tool): return "Sign-in expired — open \(tool)"
         case .missingKey: return "No API key stored"
         case .invalidKey: return "API key rejected"
+        case .rateLimited: return "Checked too often — waiting"
         case .unreadable: return "Couldn't read local data"
         case .network: return "Couldn't reach service"
         case .unsupported: return "Not supported yet"
@@ -74,7 +79,7 @@ enum ConnectionError: LocalizedError, Sendable {
     /// we just couldn't refresh) as opposed to one that means the data is gone.
     var isTransient: Bool {
         switch self {
-        case .expired, .network, .accessDenied: return true
+        case .expired, .network, .accessDenied, .rateLimited: return true
         case .notInstalled, .notSignedIn, .missingKey, .invalidKey, .unreadable, .unsupported: return false
         }
     }

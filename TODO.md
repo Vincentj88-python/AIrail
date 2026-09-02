@@ -88,6 +88,16 @@ display. `ScreenSelection` now picks the outer edge of the whole arrangement
 Display to override by name (`AppSettings.railDisplay`). Notch mode is
 unaffected: the island only ever lives on the notched display.
 
+## Rate-limit handling (2026-09-02)
+
+Claude's usage endpoint returned HTTP 429 after a burst (many rebuilds/relaunches
++ tests + the 60s timer all at once). Fixed: 429 is now `ConnectionError
+.rateLimited(retryAfter:)`, honours the `Retry-After` header, and `ProviderManager`
+backs the provider off (server's Retry-After, else 1→2→4→8→16 min) instead of
+retrying every 60s. Stale numbers stay on screen; the account page's Refresh
+button forces through the backoff. Per-account token, so per-user rate limits —
+one user at 60s is fine; the burst was the cause.
+
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).

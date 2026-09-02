@@ -239,7 +239,7 @@ private struct AccountDetailView: View {
             .scrollContentBackground(.hidden)
             HStack {
                 Button("Refresh") {
-                    Task { await manager.refresh(info.id) }
+                    Task { await manager.refresh(info.id, force: true) }
                 }
                 .disabled(manager.refreshingIds.contains(info.id))
                 Spacer()

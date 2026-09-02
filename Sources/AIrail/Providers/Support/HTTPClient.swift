@@ -6,6 +6,7 @@ enum HTTPClient {
     struct Response: Sendable {
         let status: Int
         let data: Data
+        var retryAfter: Date? = nil
     }
 
     static func get(_ url: URL, headers: [String: String], timeout: TimeInterval = 15) async throws -> Response {
@@ -31,11 +32,28 @@ enum HTTPClient {
         }
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            return Response(status: status, data: data)
+            let http = response as? HTTPURLResponse
+            return Response(
+                status: http?.statusCode ?? 0,
+                data: data,
+                retryAfter: (http?.value(forHTTPHeaderField: "Retry-After")).flatMap(Self.retryAfterDate)
+            )
         } catch {
             throw ConnectionError.network(error.localizedDescription)
         }
+    }
+
+    /// Retry-After is either a number of seconds or an HTTP date.
+    private static func retryAfterDate(_ value: String) -> Date? {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        if let seconds = Double(trimmed) {
+            return Date().addingTimeInterval(seconds)
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return formatter.date(from: trimmed)
     }
 
     /// GET that treats an auth failure as an expired sign-in for `tool`.
@@ -53,6 +71,8 @@ enum HTTPClient {
             return response.data
         case 401, 403:
             throw ConnectionError.expired(tool: tool)
+        case 429:
+            throw ConnectionError.rateLimited(tool: tool, retryAfter: response.retryAfter)
         default:
             throw ConnectionError.network("HTTP \(response.status)")
         }

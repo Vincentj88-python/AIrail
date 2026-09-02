@@ -206,6 +206,16 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(manager.connectablePlatformInfos.map(\.id), ["deepseek", "anthropic-api", "openai-api"])
     }
 
+    func testRateLimitErrorIsTransientAndReadsRetryAfter() {
+        let soon = Date().addingTimeInterval(300)
+        let err = ConnectionError.rateLimited(tool: "Claude Code", retryAfter: soon)
+        XCTAssertTrue(err.isTransient, "a 429 keeps the last real numbers, marked stale")
+        XCTAssertEqual(err.shortDescription, "Checked too often — waiting")
+        XCTAssertTrue(err.errorDescription?.contains("limiting how often") == true, err.errorDescription ?? "")
+        XCTAssertEqual(UsageFormatting.clockString(Date().addingTimeInterval(5)), "shortly")
+        XCTAssertTrue(UsageFormatting.clockString(soon).hasPrefix("at "))
+    }
+
     // MARK: Date parsing
 
     func testISO8601WithSixFractionalDigits() {

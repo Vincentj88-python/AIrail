@@ -27,6 +27,11 @@ final class ProviderManager: ObservableObject {
     private let settings: AppSettings
     private var demoEngines: [String: MockUsageEngine] = [:]
     private var lastLive: [String: UsageSnapshot] = [:]
+    /// Earliest time each provider may be fetched again; set when a read is
+    /// rate-limited or fails, so the timer doesn't keep hammering an endpoint.
+    private var backoffUntil: [String: Date] = [:]
+    /// Consecutive failures per provider, for exponential backoff.
+    private var failureStreak: [String: Int] = [:]
     private var timer: Timer?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -142,6 +147,8 @@ final class ProviderManager: ObservableObject {
         lastLive[providerId] = snapshot
         snapshots[providerId] = snapshot
         lastErrors[providerId] = nil
+        backoffUntil[providerId] = nil
+        failureStreak[providerId] = nil
         if wasDemo {
             // Demo numbers for the other providers are no longer shown anywhere.
             snapshots = snapshots.filter { settings.isConnected($0.key) }
@@ -154,6 +161,8 @@ final class ProviderManager: ObservableObject {
         snapshots[providerId] = nil
         lastLive[providerId] = nil
         lastErrors[providerId] = nil
+        backoffUntil[providerId] = nil
+        failureStreak[providerId] = nil
         if isShowingDemo {
             Task { await refreshAll() }
         }
@@ -176,9 +185,14 @@ final class ProviderManager: ObservableObject {
         }
     }
 
-    func refresh(_ providerId: String) async {
+    /// A manual refresh (the account page's Refresh button) ignores the
+    /// backoff window; the timer honours it.
+    func refresh(_ providerId: String, force: Bool = false) async {
         guard let provider = provider(for: providerId) else { return }
         if settings.isConnected(providerId) {
+            if !force, let until = backoffUntil[providerId], until > Date() {
+                return // still cooling down; leave the last snapshot in place
+            }
             refreshingIds.insert(providerId)
             defer { refreshingIds.remove(providerId) }
             do {
@@ -186,9 +200,12 @@ final class ProviderManager: ObservableObject {
                 lastLive[providerId] = snapshot
                 snapshots[providerId] = snapshot
                 lastErrors[providerId] = nil
+                backoffUntil[providerId] = nil
+                failureStreak[providerId] = nil
             } catch {
                 let failure = (error as? ConnectionError) ?? .unreadable(error.localizedDescription)
                 lastErrors[providerId] = failure
+                applyBackoff(providerId, failure: failure)
                 // Keep the last real reading on screen when the failure is
                 // just "couldn't refresh"; blank it when the sign-in is gone.
                 if failure.isTransient, let previous = lastLive[providerId] {
@@ -204,6 +221,26 @@ final class ProviderManager: ObservableObject {
                 providerId: providerId, displayName: provider.displayName
             )
         }
+    }
+
+    /// Backs off after a transient failure: honour the server's Retry-After if
+    /// it sent one, else grow the wait 1→2→4… minutes (capped), so we stop
+    /// hammering an endpoint that's already pushing back.
+    private func applyBackoff(_ providerId: String, failure: ConnectionError) {
+        guard failure.isTransient else {
+            backoffUntil[providerId] = nil
+            failureStreak[providerId] = nil
+            return
+        }
+        let streak = (failureStreak[providerId] ?? 0) + 1
+        failureStreak[providerId] = streak
+        let capped = min(streak, 5)
+        let exponential = pow(2.0, Double(capped - 1)) * 60 // 1, 2, 4, 8, 16 min
+        var until = Date().addingTimeInterval(exponential)
+        if case .rateLimited(_, let retryAfter) = failure, let retryAfter {
+            until = max(until, retryAfter)
+        }
+        backoffUntil[providerId] = until
     }
 
     private func restartTimer(interval: Double) {
