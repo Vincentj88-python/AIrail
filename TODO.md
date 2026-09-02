@@ -155,6 +155,19 @@ island rather than a crossfade.
   re-asserts after a 0.4s settle. If a specific multi-display failure repeats,
   need the exact repro (which display, notch vs edge, what appeared where).
 
+## Notch fell back to the left edge (2026-09-02)
+
+Symptom: Built-in display + Notch, but the edge rail showed on the built-in's
+left. The availability check (Settings showed "Notch available") and the
+placement resolver could disagree, and the settings-change path had no retry,
+so a transient mis-resolve stuck as an edge fallback. Fixes: `NotchGeometry`
+now keys on `safeAreaInsets.top` for BOTH "has a notch" and `notch()` (aux
+areas only refine width, centred fallback when nil), so availability and
+placement can't disagree; `applyPosition(resettling:)` now also runs after a
+0.4s settle on position/display changes, not just screen changes, so a
+transient self-heals. Verified: built-in+notch → window at the notch (x4230),
+not the left edge (x3440).
+
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).

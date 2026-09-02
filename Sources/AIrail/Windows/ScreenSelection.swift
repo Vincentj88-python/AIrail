@@ -36,7 +36,7 @@ enum ScreenSelection {
     }
 
     static func hasNotch(_ screen: NSScreen) -> Bool {
-        screen.safeAreaInsets.top > 0
+        NotchGeometry.hasNotch(screen)
     }
 
     /// Whether the Notch position makes sense for a display choice: the

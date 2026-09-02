@@ -35,24 +35,30 @@ enum NotchGeometry {
         )
     }
 
+    /// True when the display physically has a notch. Keyed on the safe-area
+    /// inset — the one signal that's reliable whether or not the display holds
+    /// the menu bar — so this agrees with `notch()` below.
+    static func hasNotch(_ screen: NSScreen) -> Bool {
+        screen.safeAreaInsets.top > 0
+    }
+
     /// The first attached display with a notch, or nil (external displays,
-    /// older MacBooks, clamshell mode).
+    /// older MacBooks, clamshell mode). The notch height comes from the safe
+    /// area; its width from the auxiliary areas when macOS reports them, else a
+    /// centred default — so a notched display always resolves to a notch,
+    /// never silently falls back to an edge.
     static func notch() -> Notch? {
-        for screen in NSScreen.screens {
-            guard screen.safeAreaInsets.top > 0,
-                  let left = screen.auxiliaryTopLeftArea,
-                  let right = screen.auxiliaryTopRightArea
-            else { continue }
-            let height = screen.safeAreaInsets.top
-            let rect = NSRect(
-                x: left.maxX,
-                y: screen.frame.maxY - height,
-                width: right.minX - left.maxX,
-                height: height
-            )
-            guard rect.width > 0 else { continue }
-            return Notch(screen: screen, rect: rect)
+        guard let screen = NSScreen.screens.first(where: hasNotch) else { return nil }
+        let height = screen.safeAreaInsets.top
+        let rect: NSRect
+        if let left = screen.auxiliaryTopLeftArea,
+           let right = screen.auxiliaryTopRightArea,
+           right.minX > left.maxX {
+            rect = NSRect(x: left.maxX, y: screen.frame.maxY - height, width: right.minX - left.maxX, height: height)
+        } else {
+            let width = virtualWidth
+            rect = NSRect(x: (screen.frame.midX - width / 2).rounded(), y: screen.frame.maxY - height, width: width, height: height)
         }
-        return nil
+        return Notch(screen: screen, rect: rect)
     }
 }

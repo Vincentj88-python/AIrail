@@ -67,7 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         .sink { [weak self] in
             self?.overlayController?.close()
-            self?.applyPosition()
+            self?.applyPosition(resettling: true)
         }
         .store(in: &cancellables)
 
