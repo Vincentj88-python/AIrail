@@ -76,7 +76,7 @@ struct NotchView: View {
                 }
             }
             .frame(height: ui.notchSize.height)
-            RailHairline(reduceMotion: reduceMotion, axis: .horizontal)
+            RailHairline(reduceMotion: reduceMotion, axis: .horizontal, accent: railAccent)
             .frame(height: 7)
             .padding(.horizontal, 16)
             .padding(.top, 1)
@@ -84,6 +84,13 @@ struct NotchView: View {
         .accessibilityElement()
         .accessibilityLabel("AIrail")
         .accessibilityHint("Move the pointer to the notch to expand the usage island.")
+    }
+
+    private var railAccent: Color {
+        let peak = manager.railProviderInfos
+            .compactMap { manager.snapshot(for: $0.id)?.ringPercent }
+            .max()
+        return UsageSeverity.of(peak).accent
     }
 
     // MARK: Expanded

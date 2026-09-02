@@ -56,6 +56,13 @@ Click a mark for its glass HUD. Top to bottom: the session ring (or the billing-
 
 The collapsed hairline is a subtle line in a single calm accent that gently breathes, with a soft matching glow (static under Reduce Motion) — barely there on purpose.
 
+## Insights
+
+- **Time to limit.** While a session is actively climbing, the HUD projects when you'll hit the limit at that pace ("≈ 35 min to limit"), or reassures you the window resets first.
+- **Notifications.** Opt-in macOS alerts when an account passes 75% or 90%, and when a session window resets so you can batch heavy work (Settings › General).
+- **Ambient warning.** The collapsed hairline stays a calm accent with headroom and warms to amber then red as your nearest limit fills — peripheral awareness without opening anything.
+- **API-equivalent value.** For subscription accounts, an estimate of what the week's tokens would have cost pay-as-you-go ("≈ $340 of API-priced tokens this week"), from public model prices — an estimate, never a bill.
+
 ## Demo data
 
 Until you connect an account, the rail shows demo data for the tools it detects on your Mac (a slow random walk that looks alive but is not real), every mark carries a `demo` badge, and the overlay offers a **Connect…** link. `live` only ever means a real read succeeded.

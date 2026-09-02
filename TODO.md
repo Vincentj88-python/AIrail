@@ -221,6 +221,22 @@ card/island spring is seen. Kept the Dock-magnify-on-hover.
   feed (GitHub Pages or a public releases repo), and swap the checker's
   "Download" for Sparkle's updater. Needs the public feed + notarization.
 
+## Insights (2026-09-02)
+
+Four data-mining features on top of what's already collected:
+- **Burn-rate projection** (`ProviderManager.projection(for:)` + `UsageProjection`):
+  keeps 30 min of (time, ring %) samples, fits a slope, projects time-to-100%
+  vs the reset time. Shown in the HUD only when meaningfully climbing.
+- **Notifications** (`UsageNotifier`, UserNotifications): 75/90% thresholds
+  (once per window) + window-reset detection (a ≥25pt percent drop). Global
+  opt-in `notificationsEnabled` (Settings › General, default on).
+- **Ambient rail colour** (`UsageSeverity` → `RailHairline` accent): calm
+  periwinkle < 70%, amber 70–90%, red ≥ 90%, from the nearest-to-limit account.
+- **API-equivalent value** (`ModelPricing`): estimates PAYG cost of the week's
+  tokens at the dominant model's public price (cache reads dominate volume and
+  are cheapest). Prices are approximate placeholders — edit `ModelPricing.table`
+  with real numbers. Labelled "est." in the UI.
+
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).

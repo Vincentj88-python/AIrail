@@ -53,9 +53,14 @@ private struct GeneralPane: View {
             } footer: {
                 Text("Each connected account is read again at this interval. Nothing is sent anywhere except each tool's own usage check.")
             }
+            Section {
+                Toggle("Notify me about usage", isOn: $settings.notificationsEnabled)
+            } footer: {
+                Text("A macOS notification when an account passes 75% or 90%, and when a session window resets so you can batch heavy work.")
+            }
         }
         .formStyle(.grouped)
-        .frame(height: 230)
+        .frame(height: 320)
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

@@ -27,6 +27,7 @@ final class AppSettings: ObservableObject {
         static let refreshInterval = "refreshInterval"
         static let connectedAccounts = "connectedAccounts"
         static let hiddenFromRail = "hiddenFromRail"
+        static let notifications = "notificationsEnabled"
     }
 
     static let toolProviderIds = ["cursor", "claude", "codex", "gemini", "copilot"]
@@ -63,6 +64,9 @@ final class AppSettings: ObservableObject {
     @Published var hiddenFromRailIds: Set<String> {
         didSet { defaults.set(Array(hiddenFromRailIds).sorted(), forKey: Key.hiddenFromRail) }
     }
+    @Published var notificationsEnabled: Bool {
+        didSet { defaults.set(notificationsEnabled, forKey: Key.notifications) }
+    }
 
     private let defaults: UserDefaults
 
@@ -77,6 +81,7 @@ final class AppSettings: ObservableObject {
         railDisplay = defaults.string(forKey: Key.railDisplay) ?? ScreenSelection.automatic
         autoHideDelay = defaults.object(forKey: Key.autoHideDelay) as? Double ?? 0.3
         refreshInterval = defaults.object(forKey: Key.refreshInterval) as? Double ?? 60
+        notificationsEnabled = defaults.object(forKey: Key.notifications) as? Bool ?? true
         connectedAccountIds = Set(defaults.stringArray(forKey: Key.connectedAccounts) ?? [])
         hiddenFromRailIds = Set(defaults.stringArray(forKey: Key.hiddenFromRail) ?? [])
         // v0.1 stored "enabled providers"; accounts replaced that concept.

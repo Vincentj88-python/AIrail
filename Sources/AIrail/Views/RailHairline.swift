@@ -7,10 +7,9 @@ import SwiftUI
 struct RailHairline: View {
     var reduceMotion: Bool
     var axis: Axis = .vertical
+    /// The line's colour — calm by default, warming toward the limit.
+    var accent: Color = Color(hex: 0x6E8BFF)
 
-    /// A soft periwinkle that matches the overlay's accent; reads as a faint
-    /// glow rather than a provider colour.
-    private static let accent = Color(hex: 0x6E8BFF)
     private static let breathPeriod: Double = 4.5
 
     var body: some View {
@@ -40,7 +39,7 @@ struct RailHairline: View {
 
     private func line(width: CGFloat) -> some View {
         Capsule(style: .continuous)
-            .fill(Self.accent)
+            .fill(accent)
             .frame(
                 width: axis == .vertical ? width : nil,
                 height: axis == .vertical ? nil : width

@@ -87,13 +87,22 @@ struct RailView: View {
         )
     }
 
+    /// The nearest-to-limit account tints the collapsed hairline, so you get
+    /// peripheral warning without opening anything.
+    private var railAccent: Color {
+        let peak = manager.railProviderInfos
+            .compactMap { manager.snapshot(for: $0.id)?.ringPercent }
+            .max()
+        return UsageSeverity.of(peak).accent
+    }
+
     // MARK: Collapsed
 
     private var hairline: some View {
         // A fixed height, centred — not tied to the window — so it never
         // stretches when the window resizes for the card; the card simply
         // grows over it as one motion.
-        RailHairline(reduceMotion: reduceMotion)
+        RailHairline(reduceMotion: reduceMotion, accent: railAccent)
             .frame(width: 7, height: 150)
             .accessibilityElement()
             .accessibilityLabel("AIrail")

@@ -27,6 +27,9 @@ final class ProviderManager: ObservableObject {
     private let settings: AppSettings
     private var demoEngines: [String: MockUsageEngine] = [:]
     private var lastLive: [String: UsageSnapshot] = [:]
+    /// Recent (time, ring percent) samples per provider, for the burn-rate projection.
+    private var percentHistory: [String: [(date: Date, percent: Double)]] = [:]
+    private let notifier = UsageNotifier()
     /// Earliest time each provider may be fetched again; set when a read is
     /// rate-limited or fails, so the timer doesn't keep hammering an endpoint.
     private var backoffUntil: [String: Date] = [:]
@@ -163,6 +166,8 @@ final class ProviderManager: ObservableObject {
         lastErrors[providerId] = nil
         backoffUntil[providerId] = nil
         failureStreak[providerId] = nil
+        percentHistory[providerId] = nil
+        notifier.forget(providerId)
         if isShowingDemo {
             Task { await refreshAll() }
         }
@@ -202,6 +207,8 @@ final class ProviderManager: ObservableObject {
                 lastErrors[providerId] = nil
                 backoffUntil[providerId] = nil
                 failureStreak[providerId] = nil
+                recordSample(snapshot)
+                notifier.consider(snapshot, enabled: settings.notificationsEnabled)
             } catch {
                 let failure = (error as? ConnectionError) ?? .unreadable(error.localizedDescription)
                 lastErrors[providerId] = failure
@@ -241,6 +248,38 @@ final class ProviderManager: ObservableObject {
             until = max(until, retryAfter)
         }
         backoffUntil[providerId] = until
+    }
+
+    private func recordSample(_ snapshot: UsageSnapshot) {
+        guard let percent = snapshot.ringPercent else { return }
+        var samples = percentHistory[snapshot.providerId] ?? []
+        samples.append((Date(), percent))
+        let cutoff = Date().addingTimeInterval(-1800) // keep the last 30 minutes
+        samples.removeAll { $0.date < cutoff }
+        percentHistory[snapshot.providerId] = samples
+    }
+
+    /// When the connected account would hit its limit at the pace it's been
+    /// climbing this session — nil if it isn't meaningfully climbing.
+    func projection(for id: String) -> UsageProjection? {
+        guard let snapshot = snapshots[id], snapshot.status == .ok,
+              let percent = snapshot.ringPercent, percent < 100,
+              let samples = percentHistory[id], samples.count >= 2,
+              let first = samples.first, let last = samples.last,
+              last.date.timeIntervalSince(first.date) >= 120 // need a couple of minutes
+        else { return nil }
+        let hours = last.date.timeIntervalSince(first.date) / 3600
+        let slope = (last.percent - first.percent) / hours // %/hour
+        guard slope >= 1 else { return nil } // essentially flat → no useful projection
+        let hitsAt = Date().addingTimeInterval((100 - percent) / slope * 3600)
+        let reset = snapshot.sessionPercent != nil ? snapshot.resetsAt : (snapshot.weeklyResetsAt ?? snapshot.resetsAt)
+        let resetsFirst = reset.map { $0 < hitsAt } ?? false
+        return UsageProjection(
+            ratePerHour: slope,
+            hitsLimitAt: hitsAt,
+            resetsFirst: resetsFirst,
+            basis: snapshot.sessionPercent != nil ? "session" : snapshot.periodLabel
+        )
     }
 
     private func restartTimer(interval: Double) {

@@ -687,6 +687,43 @@ final class AIrailTests: XCTestCase {
         }
     }
 
+    // MARK: Insights
+
+    func testSeverityThresholds() {
+        XCTAssertEqual(UsageSeverity.of(nil), .normal)
+        XCTAssertEqual(UsageSeverity.of(69), .normal)
+        XCTAssertEqual(UsageSeverity.of(70), .warning)
+        XCTAssertEqual(UsageSeverity.of(89), .warning)
+        XCTAssertEqual(UsageSeverity.of(90), .critical)
+        XCTAssertEqual(UsageSeverity.of(100), .critical)
+    }
+
+    func testDurationFormatting() {
+        XCTAssertEqual(UsageFormatting.duration(hours: 0.5), "30 min")
+        XCTAssertEqual(UsageFormatting.duration(hours: 2.4), "2.4 h")
+        XCTAssertEqual(UsageFormatting.duration(hours: 72), "3.0 days")
+    }
+
+    func testAPIValueEstimateFavoursCacheReads() {
+        var week = UsageAggregate()
+        // Opus-dominant week, mostly cheap cache reads.
+        week.tokens = TokenSplit(input: 1_000_000, output: 200_000, cacheWrite: 500_000, cacheRead: 20_000_000)
+        week.models = ["claude-opus-5": 21_700_000]
+        let dollars = ModelPricing.estimate(week)!
+        // 1M*15 + 0.2M*75 + 0.5M*18.75 + 20M*1.5, all /1e6
+        XCTAssertEqual(dollars, 15 + 15 + 9.375 + 30, accuracy: 0.01)
+        XCTAssertNil(ModelPricing.estimate(UsageAggregate()), "no tokens → no estimate")
+    }
+
+    @MainActor
+    func testUpdateVersionComparison() {
+        XCTAssertTrue(UpdateChecker.isNewer("0.2.1", than: "0.2.0"))
+        XCTAssertTrue(UpdateChecker.isNewer("0.10.0", than: "0.9.9"))
+        XCTAssertTrue(UpdateChecker.isNewer("1.0", than: "0.9.9"))
+        XCTAssertFalse(UpdateChecker.isNewer("0.2.0", than: "0.2.0"))
+        XCTAssertFalse(UpdateChecker.isNewer("0.1.9", than: "0.2.0"))
+    }
+
     // MARK: Helpers
 
     private static func json(_ text: String) throws -> JSONObject {

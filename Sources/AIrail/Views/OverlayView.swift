@@ -41,6 +41,9 @@ struct OverlayView: View {
                     UsageBreakdown(detail: detail, color: info.color)
                 }
                 ActivityLine(week: detail.week, tools: detail.topTools)
+                if let value = ModelPricing.estimate(detail.week) {
+                    valueLine(value, plan: snapshot?.plan)
+                }
             }
             if snapshot?.credits != nil || snapshot?.spend != nil {
                 Divider().overlay(Color.white.opacity(0.08))
@@ -205,6 +208,9 @@ struct OverlayView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.top, 4)
+                    if let projection = manager.projection(for: info.id) {
+                        burnRate(projection, info: info)
+                    }
                     if let lastUpdated = snapshot?.lastUpdated {
                         HStack(spacing: 6) {
                             Circle()
@@ -223,6 +229,24 @@ struct OverlayView: View {
                 .accessibilityValue(weeklyAccessibilityValue(snapshot: snapshot))
             }
         }
+    }
+
+    /// "≈ 35 min to limit at this pace", or reassurance that the window resets first.
+    private func burnRate(_ projection: UsageProjection, info: ProviderInfo) -> some View {
+        let resetsFirst = projection.resetsFirst
+        return HStack(spacing: 6) {
+            Image(systemName: resetsFirst ? "checkmark.circle" : "gauge.with.dots.needle.67percent")
+                .foregroundStyle(resetsFirst ? Color.green : info.color)
+            Text(resetsFirst
+                 ? "On track — \(projection.basis) resets first"
+                 : "≈ \(UsageFormatting.duration(hours: projection.hoursToLimit)) to limit at this pace")
+                .foregroundStyle(.secondary)
+        }
+        .font(.subheadline)
+        .padding(.top, 2)
+        .accessibilityLabel(resetsFirst
+            ? "On track, the \(projection.basis) window resets before the limit"
+            : "About \(UsageFormatting.duration(hours: projection.hoursToLimit)) to the limit at the current pace")
     }
 
     private func sessionRing(info: ProviderInfo, snapshot: UsageSnapshot?) -> some View {
@@ -250,6 +274,25 @@ struct OverlayView: View {
         .accessibilityElement()
         .accessibilityLabel(label)
         .accessibilityValue(percent.map { "\(Int($0.rounded())) percent" } ?? "unknown")
+    }
+
+    /// "≈ $340 of API-priced tokens this week" — what a subscription's usage
+    /// would have cost pay-as-you-go. An estimate, always labelled as one.
+    private func valueLine(_ dollars: Double, plan: String?) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "wand.and.stars.inverse")
+                .foregroundStyle(.secondary)
+            Text("≈ ")
+                .foregroundStyle(.secondary)
+                + Text(UsageFormatting.dollars(dollars))
+                .fontWeight(.semibold)
+                + Text(" of API-priced tokens this week")
+                .foregroundStyle(.secondary)
+        }
+        .font(.caption)
+        .foregroundStyle(.tertiary)
+        .help("Estimated pay-as-you-go API cost of this week's tokens, at public model prices. An estimate, not a bill.")
+        .accessibilityLabel("Estimated API-equivalent value this week: \(UsageFormatting.dollars(dollars))")
     }
 
     // MARK: Chart
