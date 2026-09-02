@@ -1,13 +1,17 @@
 import AppKit
 import SwiftUI
 
-/// The rail folded into the MacBook notch. Collapsed, only a hairline shows
-/// under the notch; on hover the notch grows down into a Dynamic Island-style
-/// row of marks. Same three states and timings as the edge rail.
+/// The rail folded into the MacBook notch — or into a drawn island on a
+/// display without one. Collapsed, only a hairline shows under the notch (plus
+/// the pill itself when drawn); on hover the notch grows down into a Dynamic
+/// Island-style row of marks. Same three states and timings as the edge rail.
 @MainActor
 final class NotchWindowController {
     var onSelect: (@MainActor (String) -> Void)?
     var isOverlayOpen: (@MainActor () -> Bool) = { false }
+    /// Which notch to hang from — the hardware one or a drawn one — decided by
+    /// the app from the position and display settings.
+    var resolveNotch: (@MainActor () -> NotchGeometry.Notch?) = { nil }
 
     static let hairlineZone: CGFloat = 10
     static let markSize: CGFloat = 40
@@ -103,15 +107,16 @@ final class NotchWindowController {
         }
     }
 
-    /// Re-reads the notch (displays come and go) and refits the panel.
+    /// Re-resolves the notch (displays come and go) and refits the panel.
     func reposition() {
-        notch = NotchGeometry.notch()
-        guard notch != nil else {
+        notch = resolveNotch()
+        guard let notch else {
             panel.orderOut(nil)
             return
         }
         panel.setFrame(frame(expanded: ui.isExpanded), display: true)
-        ui.notchSize = notch.map { $0.rect.size } ?? .zero
+        ui.notchSize = notch.rect.size
+        ui.notchIsVirtual = notch.isVirtual
     }
 
     func expandedFrame() -> NSRect {

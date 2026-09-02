@@ -138,6 +138,23 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(reloaded.railSide, .left, "notch mode's edge fallback is the left")
     }
 
+    func testVirtualNotchSitsInTheMenuBarCentre() {
+        let ultrawide = NSRect(x: 0, y: 0, width: 3440, height: 1440)
+        let pill = NotchGeometry.virtualRect(in: ultrawide, menuBarHeight: 30)
+        XCTAssertEqual(pill.midX, 1720)
+        XCTAssertEqual(pill.maxY, 1440, "flush with the top of the display")
+        XCTAssertEqual(pill.height, 30, "as tall as the menu bar")
+        XCTAssertEqual(pill.width, NotchGeometry.virtualWidth)
+
+        let noMenuBar = NotchGeometry.virtualRect(in: NSRect(x: -1920, y: 360, width: 1920, height: 1080), menuBarHeight: 0)
+        XCTAssertEqual(noMenuBar.height, NotchGeometry.virtualMinHeight, "a display without a menu bar still gets a pill")
+        XCTAssertEqual(noMenuBar.midX, -960)
+
+        XCTAssertTrue(AppSettings.RailPosition.island.isIsland)
+        XCTAssertTrue(AppSettings.RailPosition.notch.isIsland)
+        XCTAssertFalse(AppSettings.RailPosition.left.isIsland)
+    }
+
     func testAutomaticRailDisplayIsTheOuterEdge() {
         // Vincent's desk: Dell | ultrawide (main) | MacBook, left to right.
         let dell = NSRect(x: -1920, y: 360, width: 1920, height: 1080)

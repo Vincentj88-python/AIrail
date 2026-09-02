@@ -9,11 +9,14 @@ final class AppSettings: ObservableObject {
         var label: String { rawValue.capitalized }
     }
 
-    /// Where the rail lives: a screen edge, or folded into the MacBook notch.
+    /// Where the rail lives: a screen edge, folded into the MacBook notch, or
+    /// as a drawn island at the top centre of a display without one.
     enum RailPosition: String, CaseIterable, Identifiable {
-        case left, right, notch
+        case left, right, notch, island
         var id: String { rawValue }
         var label: String { rawValue.capitalized }
+        /// Notch and Island share the island window; only the edge rail differs.
+        var isIsland: Bool { self == .notch || self == .island }
     }
 
     private enum Key {

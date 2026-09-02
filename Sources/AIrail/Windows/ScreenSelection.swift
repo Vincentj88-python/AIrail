@@ -47,6 +47,12 @@ enum ScreenSelection {
         return screen(named: preference).map(hasNotch) ?? false
     }
 
+    /// Where a drawn island goes: the chosen display, or the one with the menu bar.
+    static func islandScreen(preference: String) -> NSScreen? {
+        if preference != automatic, let named = screen(named: preference) { return named }
+        return NSScreen.screens.first ?? NSScreen.main
+    }
+
     /// The display the pointer would cross onto past the rail's edge, if any —
     /// the edge is then a seam, not somewhere the pointer can rest.
     static func neighbour(beyond screen: NSScreen, side: AppSettings.RailSide) -> NSScreen? {

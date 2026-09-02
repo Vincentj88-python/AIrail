@@ -56,9 +56,20 @@ struct NotchView: View {
 
     // MARK: Collapsed
 
+    /// On a real notch the top area is a cut-out, so nothing is drawn there;
+    /// on a display without one the same area is painted as the pill.
     private var hairline: some View {
         VStack(spacing: 0) {
-            Color.clear.frame(height: ui.notchSize.height)
+            Group {
+                if ui.notchIsVirtual {
+                    pillShape
+                        .fill(Color.black)
+                        .overlay(pillShape.strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(height: ui.notchSize.height)
             CascadingHairline(
                 colors: manager.railProviderInfos.map(\.color),
                 reduceMotion: reduceMotion,
@@ -93,6 +104,14 @@ struct NotchView: View {
     private var islandShape: UnevenRoundedRectangle {
         UnevenRoundedRectangle(
             cornerRadii: .init(topLeading: 0, bottomLeading: 20, bottomTrailing: 20, topTrailing: 0),
+            style: .continuous
+        )
+    }
+
+    /// The drawn notch: the same silhouette as the real one, at menu-bar height.
+    private var pillShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            cornerRadii: .init(topLeading: 0, bottomLeading: 12, bottomTrailing: 12, topTrailing: 0),
             style: .continuous
         )
     }

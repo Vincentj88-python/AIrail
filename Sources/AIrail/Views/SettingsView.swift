@@ -84,10 +84,21 @@ private struct RailPane: View {
         ScreenSelection.notchAvailable(preference: settings.railDisplay)
     }
 
-    /// Notch is offered only for the display that has one (a stored choice
-    /// still shows so it can be changed).
+    /// Notch is offered only for the display that has one; Island for any
+    /// other (a stored choice still shows so it can be changed).
     private var availablePositions: [AppSettings.RailPosition] {
-        notchAvailable || settings.position == .notch ? AppSettings.RailPosition.allCases : [.left, .right]
+        var positions: [AppSettings.RailPosition] = [.left, .right]
+        if notchAvailable || settings.position == .notch {
+            positions.append(.notch)
+        }
+        if !selectedDisplayHasNotch || settings.position == .island {
+            positions.append(.island)
+        }
+        return positions
+    }
+
+    private var selectedDisplayHasNotch: Bool {
+        ScreenSelection.screen(named: settings.railDisplay).map(ScreenSelection.hasNotch) ?? false
     }
 
     private var displayFooter: String {
@@ -99,11 +110,11 @@ private struct RailPane: View {
         if let screen = ScreenSelection.screen(named: settings.railDisplay), ScreenSelection.hasNotch(screen) {
             return "\(screen.localizedName) has a notch, so Notch is available as a position."
         }
-        return "Only the MacBook's built-in display has a notch; other displays offer Left and Right."
+        return "Only the MacBook's built-in display has a notch. Island gives other displays the same look with a drawn one."
     }
 
     private var positionFooter: String? {
-        guard settings.position != .notch,
+        guard !settings.position.isIsland,
               let screen = ScreenSelection.railScreen(preference: settings.railDisplay, side: settings.railSide),
               let neighbour = ScreenSelection.neighbour(beyond: screen, side: settings.railSide)
         else { return nil }
@@ -121,9 +132,11 @@ private struct RailPane: View {
                     }
                 }
                 .onChange(of: settings.railDisplay) { _, _ in
-                    // Notch only exists on one display; leaving it means an edge.
+                    // Notch only exists on one display; elsewhere the same look is Island.
                     if settings.position == .notch, !notchAvailable {
-                        settings.position = .left
+                        settings.position = .island
+                    } else if settings.position == .island, selectedDisplayHasNotch {
+                        settings.position = .notch
                     }
                 }
             } footer: {
@@ -139,6 +152,8 @@ private struct RailPane: View {
             } footer: {
                 if settings.position == .notch {
                     Text("Notch folds the rail into the notch: a hairline under it, a Dynamic Island-style row of marks on hover, the HUD beneath. Falls back to the left edge whenever that display isn't attached.")
+                } else if settings.position == .island {
+                    Text("Island draws a small black pill at the top centre of the display — the notch look without the notch. Hover it for the row of marks; the HUD hangs beneath. Automatic puts it on the display with the menu bar.")
                 } else if let positionFooter {
                     Text(positionFooter)
                 } else {

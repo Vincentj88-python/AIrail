@@ -97,10 +97,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
     }
 
-    /// Puts the rail on the chosen edge, or into the notch when asked and a
-    /// notched display is attached — otherwise the left edge stands in.
+    /// The notch the island hangs from for the current settings: the hardware
+    /// one for Notch, a drawn one on the chosen display for Island, nil for the
+    /// edge rail or when the wanted display isn't attached.
+    private func resolveNotch() -> NotchGeometry.Notch? {
+        switch settings.position {
+        case .notch:
+            return ScreenSelection.notchAvailable(preference: settings.railDisplay) ? NotchGeometry.notch() : nil
+        case .island:
+            return ScreenSelection.islandScreen(preference: settings.railDisplay).map(NotchGeometry.virtualNotch(on:))
+        case .left, .right:
+            return nil
+        }
+    }
+
+    /// Puts the rail on the chosen edge, or hangs the island from a notch
+    /// (real or drawn) — otherwise the left edge stands in.
     private func applyPosition() {
-        let wantsNotch = settings.position == .notch && ScreenSelection.notchAvailable(preference: settings.railDisplay)
+        notchController?.resolveNotch = { [weak self] in self?.resolveNotch() }
+        let wantsNotch = resolveNotch() != nil
         if wantsNotch != usingNotch {
             uiState.isExpanded = false
         }

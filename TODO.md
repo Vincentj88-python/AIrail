@@ -91,10 +91,13 @@ unaffected: the island only ever lives on the notched display.
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).
-- [ ] Possible "Island" position: a Dynamic Island-style pill at the top
-      centre of any display (no notch needed) — for people whose main display
-      is external. Vincent's first reaction to notch mode was that the
-      multi-monitor positioning felt off; ask before building.
+- [x] "Island" position built (2026-09-02): `NotchGeometry.virtualNotch` draws
+      a 200 × menu-bar-height pill at the top centre of the chosen display;
+      `NotchView` paints it black when `ui.notchIsVirtual`. Same controller as
+      Notch. Settings › Rail offers Notch for the built-in display and Island
+      for the rest, and swaps between them when the display changes.
+- [ ] Island polish: consider hiding the pill entirely when collapsed (hairline
+      only) as an option for people who find a permanent pill too much.
 - [ ] Notch polish: island top corners where it grows wider than the notch;
       consider a "Both" position (island on the MacBook, rail on externals).
 - [ ] AIrail's own Keychain items suffer the same ad-hoc-signing re-prompt as
