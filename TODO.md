@@ -175,6 +175,18 @@ changed), so the idle line ran ~38% of screen height. Split the heights in
 `RailWindow.frame(expanded:)`: expanded fits the card; collapsed is a compact
 168 pt centred hover strip that grows to the card on hover.
 
+## Two-stage expand → one motion (2026-09-02)
+
+Hovering made the bar "get longer, then the icons open" — two steps. Causes:
+(1) the collapsed hairline used `maxHeight: .infinity`, so it snapped to the
+full window height the instant the window resized; (2) the marks had their own
+entrance stagger on top of the card/island transition. Fixes: the collapsed
+hairline is now a fixed 150 pt (edge) / fixed strip (notch), decoupled from the
+window, so it never stretches; removed the per-mark entrance stagger on both
+the rail card and the notch island so the whole thing reveals as one spring.
+Window resize stays instant but is invisible (transparent panel); only the
+card/island spring is seen. Kept the Dock-magnify-on-hover.
+
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).

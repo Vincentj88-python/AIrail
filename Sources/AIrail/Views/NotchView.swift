@@ -169,8 +169,6 @@ private struct NotchMarksRow: View {
     @Binding var hoveredId: String?
     var onSelect: (String) -> Void
 
-    @State private var appeared = false
-
     var body: some View {
         HStack(spacing: NotchWindowController.markSpacing) {
             let infos = manager.railProviderInfos
@@ -178,7 +176,6 @@ private struct NotchMarksRow: View {
                 mark(info: info, index: index)
             }
         }
-        .onAppear { appeared = true }
     }
 
     private func mark(info: ProviderInfo, index: Int) -> some View {
@@ -207,15 +204,7 @@ private struct NotchMarksRow: View {
                 hoveredId = nil
             }
         }
-        .opacity(appeared ? 1 : 0)
-        .scaleEffect(appeared || reduceMotion ? 1 : 0.4)
-        .offset(y: appeared || reduceMotion ? 0 : -12)
-        .animation(
-            reduceMotion
-                ? .easeInOut(duration: 0.18)
-                : .spring(response: 0.4, dampingFraction: 0.62).delay(0.04 + Double(index) * 0.045),
-            value: appeared
-        )
+        // No per-mark entrance: the island unfurls as one motion.
         .help(snapshot?.ringPercent.map { "\(info.displayName) — \(Int($0.rounded()))%" } ?? info.displayName)
         .accessibilityLabel(info.displayName)
         .accessibilityValue(snapshot?.ringPercent.map { "\(Int($0.rounded())) percent used" } ?? "no data")

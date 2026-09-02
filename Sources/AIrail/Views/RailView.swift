@@ -87,10 +87,11 @@ struct RailView: View {
     // MARK: Collapsed
 
     private var hairline: some View {
+        // A fixed height, centred — not tied to the window — so it never
+        // stretches when the window resizes for the card; the card simply
+        // grows over it as one motion.
         RailHairline(reduceMotion: reduceMotion)
-            .frame(width: 7)
-            .frame(maxHeight: .infinity)
-            .padding(.vertical, 2)
+            .frame(width: 7, height: 150)
             .accessibilityElement()
             .accessibilityLabel("AIrail")
             .accessibilityHint("Move the pointer here to expand the usage rail.")
@@ -99,8 +100,8 @@ struct RailView: View {
 
 // MARK: - Expanded rail
 
-/// The expanded card. Owns the entrance stagger (logos cascade in one after
-/// another) and the Dock-style magnify-on-hover for individual logos.
+/// The expanded card. Reveals as one motion (the rail's insertion transition);
+/// individual marks only do the Dock-style magnify on hover.
 private struct ExpandedRailContent: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var manager: ProviderManager
@@ -108,7 +109,6 @@ private struct ExpandedRailContent: View {
     var reduceMotion: Bool
     var onSelect: (String) -> Void
 
-    @State private var appeared = false
     @State private var hoveredProviderId: String?
 
     var body: some View {
@@ -127,7 +127,6 @@ private struct ExpandedRailContent: View {
             x: settings.railSide == .left ? 4 : -4,
             y: 2
         )
-        .onAppear { appeared = true }
     }
 
     private func logoButton(info: ProviderInfo, index: Int) -> some View {
@@ -168,23 +167,14 @@ private struct ExpandedRailContent: View {
             }
             .lineLimit(1)
         }
-        // Staggered entrance: each cell pops in slightly after the previous.
-        .opacity(appeared ? 1 : 0)
-        .scaleEffect(appeared || reduceMotion ? 1 : 0.4, anchor: .center)
-        .offset(x: appeared || reduceMotion ? 0 : (settings.railSide == .left ? -14 : 14))
-        .animation(entranceAnimation(index: index), value: appeared)
+        // No per-cell entrance: the whole card unfurls as one motion (the
+        // rail's insertion transition), so the reveal reads as a single move.
         .help(helpText(info: info, snapshot: snapshot))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(info.displayName)
         .accessibilityValue(
             snapshot?.ringPercent.map { "\(Int($0.rounded())) percent used" } ?? "no data"
         )
-    }
-
-    private func entranceAnimation(index: Int) -> Animation {
-        reduceMotion
-            ? .easeInOut(duration: 0.18)
-            : .spring(response: 0.4, dampingFraction: 0.62).delay(0.04 + Double(index) * 0.045)
     }
 
     private var card: some View {
