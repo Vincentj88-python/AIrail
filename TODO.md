@@ -187,6 +187,24 @@ the rail card and the notch island so the whole thing reveals as one spring.
 Window resize stays instant but is invisible (transparent panel); only the
 card/island spring is seen. Kept the Dock-magnify-on-hover.
 
+## Distribution (2026-09-02)
+
+- Repo is **private** for now (Vincent-only); goes public once there's an Apple
+  Developer ID. `v0.2.0` release is a **draft** with the DMG attached.
+- `scripts/release.sh` builds a Release `.app` signed with the stable
+  self-signed "AIrail Dev" cert and wraps it in `dist/AIrail-<version>.dmg`.
+  Same cert every release ⇒ Keychain "Always Allow" persists across versions.
+- No Apple Developer account yet ($99/yr; app is free, no way to recoup — fine,
+  it's about getting the work out). Consequence: not notarized, so first launch
+  needs a one-time right-click → Open (documented in README).
+- **When the Developer ID exists (drop-in, no rework):** set
+  `AIRAIL_SIGN_IDENTITY` to the Developer ID, add `--options runtime` to the
+  build in release.sh, add a `notarytool submit --wait && xcrun stapler staple`
+  step after the DMG, then make the repo public and publish the release.
+  Optional: a Homebrew tap (`brew install --cask vincentj88/airail/airail`)
+  pointing at the release DMG, and Sparkle auto-updates via a GitHub Pages
+  appcast.
+
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).

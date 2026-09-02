@@ -62,7 +62,18 @@ Until you connect an account, the rail shows demo data for the tools it detects 
 
 No telemetry. Nothing scraped from browsers or cookies. AIrail reads only the sign-ins of the tools you connect, after you approve each one.
 
-## Build & Run
+## Install
+
+Download `AIrail-x.y.z.dmg` from the [latest release](https://github.com/Vincentj88-python/AIrail/releases), open it, and drag **AIrail** into **Applications**.
+
+Because AIrail reads the sign-ins of the tools you connect, it isn't sandboxed and so isn't on the App Store. Until it's notarized with an Apple Developer ID, macOS will block the first launch — this is expected:
+
+1. Open **Applications**, right-click **AIrail**, choose **Open**, then **Open** again. (Or: try to open it, then go to **System Settings › Privacy & Security** and click **Open Anyway**.)
+2. You only do this once. After that it launches normally, and updates keep it that way.
+
+The app has no Dock icon — look for the faint hairline on the edge of your screen (or the notch/island, depending on your settings).
+
+## Build from source
 
 Requires **macOS 14+** and **Xcode 16+** (Swift 6).
 
@@ -72,7 +83,9 @@ cd AIrail
 open AIrail.xcodeproj
 ```
 
-Select the **AIrail** scheme and **Run** (⌘R). The app has no Dock icon — look for the faint teal hairline on the left edge of your screen.
+Select the **AIrail** scheme and **Run** (⌘R). To build a signed DMG the way releases are packaged, run `./scripts/release.sh` (output in `dist/`).
+
+## Using it
 
 - **Hover** the hairline to expand the rail.
 - **Click** a logo to open the stats HUD; click another logo to swap, press **Escape** or click outside to dismiss.
@@ -82,7 +95,7 @@ Settings cover accounts (add, remove, show on rail), the rail's display and posi
 
 Launch flags for development: `--settings[=accounts]` opens Settings, `--add-account[=other]` opens the Add Account sheet (or its API-key page), `--overlay=<id>` opens the overlay for a provider.
 
-AIrail is distributed as source on GitHub, not through the App Store.
+AIrail is distributed as a signed DMG and source on GitHub, not through the App Store.
 
 ## Tests
 
