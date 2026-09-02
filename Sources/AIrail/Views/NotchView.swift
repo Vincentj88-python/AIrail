@@ -73,11 +73,7 @@ struct NotchView: View {
                 }
             }
             .frame(height: ui.notchSize.height)
-            CascadingHairline(
-                colors: manager.railProviderInfos.map(\.color),
-                reduceMotion: reduceMotion,
-                axis: .horizontal
-            )
+            RailHairline(reduceMotion: reduceMotion, axis: .horizontal)
             .frame(height: 7)
             .padding(.horizontal, 16)
             .padding(.top, 1)
@@ -122,8 +118,7 @@ struct NotchView: View {
     @ViewBuilder
     private func islandBackground(_ shape: some Shape) -> some View {
         if ui.notchIsVirtual {
-            shape.fill(.ultraThinMaterial)
-                .overlay(shape.fill(Color.black.opacity(0.24)))
+            GlassPanel(shape: shape)
         } else {
             shape.fill(Color.black)
         }

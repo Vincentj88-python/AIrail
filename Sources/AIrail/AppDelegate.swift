@@ -87,14 +87,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         .store(in: &cancellables)
 
-        // Displays come and go: the notch may appear (lid opened) or vanish (clamshell).
+        // Displays come and go: the notch may appear (lid opened) or vanish
+        // (clamshell), and a chosen display may reattach. The screen list often
+        // isn't final the instant the notification fires, so re-assert after a
+        // short settle too.
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.overlayController?.close()
-                self?.applyPosition()
+                self?.applyPosition(resettling: true)
             }
             .store(in: &cancellables)
+
+        // The screen list can still be settling at launch (external displays,
+        // wake-from-sleep); re-assert once it has.
+        applyPosition(resettling: true)
     }
 
     /// The notch the island hangs from for the current settings: the hardware
@@ -112,7 +119,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Puts the rail on the chosen edge, or hangs the island from a notch
-    /// (real or drawn) — otherwise the left edge stands in.
+    /// (real or drawn) — otherwise the left edge stands in. `resettling` runs
+    /// it again after a short delay, for when the screen list is still settling.
+    private func applyPosition(resettling: Bool = false) {
+        applyPosition()
+        if resettling {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                self?.applyPosition()
+            }
+        }
+    }
+
     private func applyPosition() {
         notchController?.resolveNotch = { [weak self] in self?.resolveNotch() }
         let wantsNotch = resolveNotch() != nil

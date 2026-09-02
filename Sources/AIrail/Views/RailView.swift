@@ -87,10 +87,7 @@ struct RailView: View {
     // MARK: Collapsed
 
     private var hairline: some View {
-        CascadingHairline(
-            colors: manager.railProviderInfos.map(\.color),
-            reduceMotion: reduceMotion
-        )
+        RailHairline(reduceMotion: reduceMotion)
             .frame(width: 7)
             .frame(maxHeight: .infinity)
             .padding(.vertical, 2)
@@ -191,16 +188,7 @@ private struct ExpandedRailContent: View {
     }
 
     private var card: some View {
-        RoundedRectangle(cornerRadius: 26, style: .continuous)
-            .fill(.ultraThinMaterial)
-            .overlay(
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(Color.black.opacity(0.24))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.09))
-            )
+        GlassPanel(shape: RoundedRectangle(cornerRadius: 26, style: .continuous))
     }
 
     private func helpText(info: ProviderInfo, snapshot: UsageSnapshot?) -> String {

@@ -140,6 +140,21 @@ island rather than a crossfade.
   `expandedWidth` 88→108, cell height math updated in RailWindow. Hover
   magnify now applies to the mark only, not the caption.
 
+## Style + robustness pass (2026-09-02)
+
+- Collapsed hairline was a rainbow (orange+green+purple stacked at once) — the
+  cascade stacked with several providers. Replaced `CascadingHairline` with
+  `RailHairline`: one calm periwinkle accent that breathes, never a rainbow.
+- Drawn Island read as pure black on dark wallpapers (ultraThinMaterial + 24%
+  black composited to near-black). New shared `GlassPanel` (dark-grey base +
+  material + top highlight + light edge) used by the island and the rail card
+  so it's clearly frosted glass on any wallpaper. Real hardware notch stays
+  OLED black by the earlier choice — flip to glass there if wanted.
+- Screen handling: the screen list often isn't final when
+  didChangeScreenParameters fires (or at launch), so `applyPosition(resettling:)`
+  re-asserts after a 0.4s settle. If a specific multi-display failure repeats,
+  need the exact repro (which display, notch vs edge, what appeared where).
+
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).
