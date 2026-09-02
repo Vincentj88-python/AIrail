@@ -26,6 +26,8 @@ final class OverlayPanel: NSPanel {
 final class OverlayWindowController {
     var onClose: (@MainActor () -> Void)?
     var railFrameProvider: (@MainActor () -> NSRect?)?
+    /// Notch mode hangs the HUD under the island instead of beside the rail.
+    var anchorsBelow = false
 
     private let panel: OverlayPanel
     private let settings: AppSettings
@@ -88,24 +90,32 @@ final class OverlayWindowController {
     }
 
     private func layout() {
-        guard let screen = NSScreen.screens.first ?? NSScreen.main else { return }
+        let rail = railFrameProvider?() ?? .zero
+        // Stay on whichever display the rail or island is on.
+        let screen = NSScreen.screens.first { $0.frame.intersects(rail) } ?? NSScreen.screens.first ?? NSScreen.main
+        guard let screen else { return }
         let visible = screen.visibleFrame
         var size = panel.contentView?.fittingSize ?? .zero
         if size.width < 100 || size.height < 100 {
             size = NSSize(width: 480, height: 620)
         }
-        let rail = railFrameProvider?() ?? .zero
         let gap: CGFloat = 10
 
-        var x = settings.railSide == .left
-            ? rail.maxX + gap
-            : rail.minX - gap - size.width
+        var x: CGFloat
+        var y: CGFloat
+        if anchorsBelow {
+            x = rail.midX - size.width / 2
+            y = rail.minY - gap - size.height
+        } else {
+            x = settings.railSide == .left
+                ? rail.maxX + gap
+                : rail.minX - gap - size.width
+            y = rail.maxY - size.height // top-align the HUD with the rail
+        }
         x = min(max(x, visible.minX + 8), visible.maxX - size.width - 8)
-
-        var y = rail.maxY - size.height // top-align the HUD with the rail
         y = min(max(y, visible.minY + 8), visible.maxY - size.height - 8)
 
-        panel.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
+        panel.setFrame(NSRect(x: x.rounded(), y: y.rounded(), width: size.width, height: size.height), display: true)
         panel.invalidateShadow()
     }
 

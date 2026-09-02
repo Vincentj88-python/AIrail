@@ -55,7 +55,36 @@ Open polish: hover callout was only eyeballed in code (the overlay closes on
 any outside click, so it couldn't be screenshotted); demo hourly shape is a
 fixed working-day curve.
 
+## Other… accounts + notch mode (2026-09-02, evening)
+
+- **Keyed platforms** (`KeyedPlatform.catalog`, `KeyedProvider`): OpenRouter
+  (`/api/v1/auth/key` + `/api/v1/credits`), DeepSeek (`/user/balance`),
+  Anthropic API (`/v1/organizations/usage_report/messages` + `cost_report`,
+  admin key), OpenAI API (`/v1/organization/usage/completions` + `/costs`,
+  admin key). Keys live in AIrail's own Keychain item (service "AIrail",
+  account = platform id). **Parsers follow the docs but are NOT yet verified
+  against a real key** — no keys on this Mac. Run
+  `TEST_RUNNER_AIRAIL_LIVE=1 TEST_RUNNER_AIRAIL_<PLATFORM>_KEY=… xcodebuild test
+  -only-testing:AIrailTests/LiveProviderTests` with the first real key and fix
+  whatever the response actually looks like. Known guesses: Anthropic
+  `cost_report.amount` treated as minor units (cents); OpenAI costs
+  `amount.value` treated as dollars.
+- Decision: web-only consumer apps stay unsupported (listed in the Other page
+  with a "Request a provider…" link). No cookie scraping.
+- **Notch mode** (`NotchWindowController`, `NotchView`, `NotchGeometry`,
+  `AppSettings.position`): verified on this MacBook's built-in display
+  (220×38 pt notch) — hairline under the notch, island on hover, HUD below.
+  Panel level `.statusBar` is enough to sit above the menu bar. Falls back to
+  the left edge when no notch is attached; `railSide` is now derived from
+  `position`. Adding a platform = one `KeyedPlatform` entry + a fixture test.
+
 ## Next up
+
+- [ ] Verify the four keyed platforms against real keys (see above).
+- [ ] Notch polish: island top corners where it grows wider than the notch;
+      consider a "Both" position (island on the MacBook, rail on externals).
+- [ ] AIrail's own Keychain items suffer the same ad-hoc-signing re-prompt as
+      Claude's until a stable signing identity exists.
 
 - [x] Claude connect flow clicked through by Vincent (2026-09-02) — all four
       supported accounts have gone `live` on this Mac.

@@ -1,45 +1,26 @@
 import AppKit
 import SwiftUI
 
-/// The rail must never take key focus; hovering it should not steal
-/// the keyboard from whatever the user is doing.
-final class RailPanel: NSPanel {
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
-}
-
-/// Container view that reports mouse enter/exit for the whole rail.
-final class HoverTrackingView: NSView {
-    var onEnter: (@MainActor () -> Void)?
-    var onExit: (@MainActor () -> Void)?
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(
-            rect: .zero,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self
-        ))
-    }
-
-    override func mouseEntered(with event: NSEvent) { onEnter?() }
-    override func mouseExited(with event: NSEvent) { onExit?() }
-}
-
+/// The rail folded into the MacBook notch. Collapsed, only a hairline shows
+/// under the notch; on hover the notch grows down into a Dynamic Island-style
+/// row of marks. Same three states and timings as the edge rail.
 @MainActor
-final class RailWindowController {
+final class NotchWindowController {
     var onSelect: (@MainActor (String) -> Void)?
     var isOverlayOpen: (@MainActor () -> Bool) = { false }
+
+    static let hairlineZone: CGFloat = 10
+    static let markSize: CGFloat = 40
+    static let markSpacing: CGFloat = 12
+    static let islandPadding: CGFloat = 18
+    static let islandBodyHeight: CGFloat = markSize + 26
 
     private let panel: RailPanel
     private let settings: AppSettings
     private let manager: ProviderManager
     private let ui: RailUIState
     private var collapseTask: Task<Void, Never>?
-
-    private let collapsedWidth: CGFloat = 10
-    private let expandedWidth: CGFloat = 88
+    private(set) var notch: NotchGeometry.Notch?
 
     init(settings: AppSettings, manager: ProviderManager, ui: RailUIState) {
         self.settings = settings
@@ -53,6 +34,7 @@ final class RailWindowController {
             defer: false
         )
         panel.isFloatingPanel = true
+        // Above the menu bar, so the island can grow out of the notch.
         panel.level = .statusBar
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -60,17 +42,16 @@ final class RailWindowController {
         panel.isMovable = false
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle, .stationary]
-        // The rail is a dark-glass HUD in either system appearance.
         panel.appearance = NSAppearance(named: .darkAqua)
 
         let tracking = HoverTrackingView()
         tracking.onEnter = { [weak self] in self?.expand() }
         tracking.onExit = { [weak self] in self?.scheduleCollapse() }
 
-        let railView = RailView(settings: settings, manager: manager, ui: ui) { [weak self] providerId in
+        let notchView = NotchView(settings: settings, manager: manager, ui: ui) { [weak self] providerId in
             self?.onSelect?(providerId)
         }
-        let host = NSHostingView(rootView: railView)
+        let host = NSHostingView(rootView: notchView)
         host.translatesAutoresizingMaskIntoConstraints = false
         tracking.addSubview(host)
         NSLayoutConstraint.activate([
@@ -80,17 +61,21 @@ final class RailWindowController {
             host.bottomAnchor.constraint(equalTo: tracking.bottomAnchor),
         ])
         panel.contentView = tracking
-
-        reposition()
     }
 
+    var isVisible: Bool { panel.isVisible }
+
+    /// Shows the island on the notched display, if there is one right now.
     func show() {
+        reposition()
+        guard notch != nil else { return }
         panel.orderFrontRegardless()
     }
 
     func hide() {
         collapseTask?.cancel()
         collapseTask = nil
+        ui.isExpanded = false
         panel.orderOut(nil)
     }
 
@@ -112,15 +97,21 @@ final class RailWindowController {
         }
     }
 
-    /// Called when the overlay closes: collapse unless the pointer is on the rail.
     func scheduleCollapseIfIdle() {
         if !panel.frame.contains(NSEvent.mouseLocation) {
             scheduleCollapse()
         }
     }
 
+    /// Re-reads the notch (displays come and go) and refits the panel.
     func reposition() {
+        notch = NotchGeometry.notch()
+        guard notch != nil else {
+            panel.orderOut(nil)
+            return
+        }
         panel.setFrame(frame(expanded: ui.isExpanded), display: true)
+        ui.notchSize = notch.map { $0.rect.size } ?? .zero
     }
 
     func expandedFrame() -> NSRect {
@@ -129,7 +120,6 @@ final class RailWindowController {
 
     private func collapse() {
         ui.isExpanded = false
-        // Shrink the hit target once the collapse animation has settled.
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 380_000_000)
             guard let self, !self.ui.isExpanded else { return }
@@ -137,18 +127,20 @@ final class RailWindowController {
         }
     }
 
+    /// Collapsed: the notch plus a thin hoverable zone under it. Expanded: the
+    /// island, at least as wide as the notch, centred on it, hanging from the
+    /// top of the screen.
     private func frame(expanded: Bool) -> NSRect {
-        guard let screen = NSScreen.screens.first ?? NSScreen.main else { return .zero }
-        let visible = screen.visibleFrame
-        // Unobtrusive: ~38% of the screen, but always tall enough for the
-        // expanded card (44 pt logos + 14 pt gaps + card padding + margin).
-        let count = max(1, manager.railProviderInfos.count)
-        let contentHeight = CGFloat(count) * 44 + CGFloat(count - 1) * 14 + 32 + 24
-        var height = max(contentHeight, (visible.height * 0.38).rounded())
-        height = min(height, visible.height - 20)
-        let y = (visible.midY - height / 2).rounded()
-        let width: CGFloat = expanded ? expandedWidth : collapsedWidth
-        let x = settings.railSide == .left ? visible.minX : visible.maxX - width
-        return NSRect(x: x, y: y, width: width, height: height)
+        guard let notch else { return .zero }
+        let rect = notch.rect
+        if expanded {
+            let count = max(1, manager.railProviderInfos.count)
+            let content = CGFloat(count) * Self.markSize + CGFloat(count - 1) * Self.markSpacing + Self.islandPadding * 2
+            let width = max(rect.width, content).rounded()
+            let height = rect.height + Self.islandBodyHeight
+            return NSRect(x: (rect.midX - width / 2).rounded(), y: rect.maxY - height, width: width, height: height)
+        }
+        let height = rect.height + Self.hairlineZone
+        return NSRect(x: rect.minX, y: rect.maxY - height, width: rect.width, height: height)
     }
 }

@@ -78,15 +78,30 @@ private struct GeneralPane: View {
 private struct RailPane: View {
     @ObservedObject var settings: AppSettings
 
+    /// Notch is only offered while a notched display is attached (a stored
+    /// choice still shows so it can be changed).
+    private var availablePositions: [AppSettings.RailPosition] {
+        if NotchGeometry.notch() != nil || settings.position == .notch {
+            return AppSettings.RailPosition.allCases
+        }
+        return [.left, .right]
+    }
+
     var body: some View {
         Form {
             Section {
-                Picker("Rail side", selection: $settings.railSide) {
-                    ForEach(AppSettings.RailSide.allCases) { side in
-                        Text(side.label).tag(side)
+                Picker("Position", selection: $settings.position) {
+                    ForEach(availablePositions) { position in
+                        Text(position.label).tag(position)
                     }
                 }
                 .pickerStyle(.segmented)
+            } footer: {
+                if NotchGeometry.notch() != nil {
+                    Text("Notch folds the rail into the MacBook's notch: a hairline under it, a Dynamic Island-style row of marks on hover. Falls back to the left edge when no notched display is attached.")
+                } else {
+                    Text("Notch position appears here when a MacBook display with a notch is attached.")
+                }
             }
             Section {
                 HStack {

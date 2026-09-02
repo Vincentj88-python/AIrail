@@ -30,8 +30,11 @@ AIrail never asks for a password and has no sign-in of its own. Every tool it tr
 | **Copilot** | Your GitHub CLI (`gh`) sign-in, or the Copilot editor extension's | Premium, chat and completion meters for the month, plan, reset date |
 | **Cursor** | The sign-in Cursor stores in its local database | Included / auto / API meters for the billing cycle, plan, cycle end, and the per-request feed behind the charts and usage by model |
 | **Gemini** | — | Coming soon: no dependable way to read its quota yet |
+| **Other…** | An API key you paste, kept in AIrail's own Keychain item | OpenRouter (credits used / remaining), DeepSeek (balance), Anthropic API and OpenAI API (organization usage by model and month-to-date cost, with an Admin key) |
 
 ChatGPT and Codex share one OpenAI account, and ChatGPT itself doesn't publish usage limits, so the Codex account stands in for both. Cursor has no public API — AIrail reads what its dashboard reads, which a Cursor update could break; if that happens you get a `stale` or `error` badge, never a guess.
+
+*Other…* is Internet Accounts' "Add Other Account": platforms with a **documented** usage or credits API, connected by key. Consumer web apps without one (Perplexity, Grok, Claude.ai, ChatGPT on the web, Le Chat, Kimi) are listed there as unsupported with a link to request a provider — AIrail doesn't scrape browser cookies to fake it.
 
 Rules AIrail holds itself to: it only ever *reads* a tool's sign-in, never uses a refresh token or writes anything back, keeps no tokens on disk, and the only network traffic is each connected tool's own usage check. If a sign-in expires, the last real numbers stay on screen marked `stale` with a note to open the tool.
 
@@ -40,6 +43,10 @@ Rules AIrail holds itself to: it only ever *reads* a tool's sign-in, never uses 
 Cursor, Claude, Codex, Gemini, Copilot — real brand marks rendered from vector path data ([Simple Icons](https://simpleicons.org), CC0-1.0), tinted in the rail's provider colors. No binary logo assets are shipped; the marks live as path data in `Sources/AIrail/Views/BrandIcons.swift` and are drawn by a small built-in SVG path renderer. All trademarks belong to their respective owners and are used solely to identify the services being monitored. Codex keeps a terminal glyph (`>_`), which is its actual CLI mark.
 
 The rail shows your connected accounts (each has a *Show on rail* switch) and sizes itself to fit.
+
+## Notch mode
+
+On a MacBook with a notch, **Settings › Rail › Position › Notch** folds the rail into it, Dynamic Island-style: idle, a hairline cascades under the notch; hover, and the notch grows down into a black island holding the marks and rings; click, and the HUD hangs beneath it. It uses the notch geometry macOS reports (`safeAreaInsets`, `auxiliaryTopLeft/RightArea`), works over full-screen apps, and falls back to the left edge whenever no notched display is attached (clamshell, external-only).
 
 ## The card
 
@@ -69,9 +76,9 @@ Select the **AIrail** scheme and **Run** (⌘R). The app has no Dock icon — lo
 - **Click** a logo to open the stats HUD; click another logo to swap, press **Escape** or click outside to dismiss.
 - **Right-click** the rail (or use the `…` menu in the HUD) for **Settings…** (⌘,) and **Quit**.
 
-Settings cover accounts (add, remove, show on rail), rail side (left/right), auto-hide delay, refresh interval, and launch at login.
+Settings cover accounts (add, remove, show on rail), position (left, right, notch), auto-hide delay, refresh interval, and launch at login.
 
-Launch flags for development: `--settings[=accounts]` opens Settings, `--add-account` opens the Add Account sheet, `--overlay=<id>` opens the overlay for a provider.
+Launch flags for development: `--settings[=accounts]` opens Settings, `--add-account[=other]` opens the Add Account sheet (or its API-key page), `--overlay=<id>` opens the overlay for a provider.
 
 AIrail is distributed as source on GitHub, not through the App Store.
 
@@ -83,10 +90,11 @@ Unit tests cover the snapshot math, the accounts model, every provider's parser 
 xcodebuild -scheme AIrail test
 ```
 
-Opt-in smoke tests read the accounts actually signed in on your Mac (they hit real endpoints):
+Opt-in smoke tests read the accounts actually signed in on your Mac (they hit real endpoints); keyed platforms join in when their key is in the environment:
 
 ```
-TEST_RUNNER_AIRAIL_LIVE=1 xcodebuild -scheme AIrail test -only-testing:AIrailTests/LiveProviderTests
+TEST_RUNNER_AIRAIL_LIVE=1 TEST_RUNNER_AIRAIL_OPENROUTER_KEY=sk-or-… \
+  xcodebuild -scheme AIrail test -only-testing:AIrailTests/LiveProviderTests
 ```
 
 ## License

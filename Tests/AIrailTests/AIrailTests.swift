@@ -120,6 +120,25 @@ final class AIrailTests: XCTestCase {
     }
 
     @MainActor
+    func testRailPositionMigratesFromSide() {
+        let suite = "AIrailTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertEqual(AppSettings(defaults: defaults).position, .left, "fresh install hugs the left edge")
+
+        defaults.set("right", forKey: "railSide")
+        let migrated = AppSettings(defaults: defaults)
+        XCTAssertEqual(migrated.position, .right, "v0.1's side setting carries over")
+        XCTAssertEqual(migrated.railSide, .right)
+
+        migrated.position = .notch
+        let reloaded = AppSettings(defaults: defaults)
+        XCTAssertEqual(reloaded.position, .notch)
+        XCTAssertEqual(reloaded.railSide, .left, "notch mode's edge fallback is the left")
+    }
+
+    @MainActor
     func testRailMembershipFollowsAccounts() {
         let suite = "AIrailTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
