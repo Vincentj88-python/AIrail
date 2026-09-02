@@ -9,13 +9,21 @@ struct LogoMark: View {
     let percent: Double?
     var size: CGFloat = 44
     var isSelected = false
+    /// True on the black notch/island, where the frosted disc and faint track
+    /// go muddy; uses a cleaner dark seat and a track that reads on black.
+    var onDark = false
 
-    private var ringWidth: CGFloat { max(2.5, size * 0.062) }
+    private var ringWidth: CGFloat { max(2.5, size * (onDark ? 0.07 : 0.062)) }
 
     var body: some View {
         ZStack {
+            // A neutral base ring guarantees the gauge reads as a full circle,
+            // so a partial fill looks like usage, not a spinner.
             Circle()
-                .stroke(color.opacity(0.2), lineWidth: ringWidth)
+                .stroke(Color.white.opacity(onDark ? 0.12 : 0.06), lineWidth: ringWidth)
+                .padding(ringWidth / 2)
+            Circle()
+                .stroke(color.opacity(onDark ? 0.32 : 0.22), lineWidth: ringWidth)
                 .padding(ringWidth / 2)
             if let percent {
                 Circle()
@@ -24,9 +32,7 @@ struct LogoMark: View {
                     .rotationEffect(.degrees(-90))
                     .padding(ringWidth / 2)
             }
-            Circle()
-                .fill(.ultraThinMaterial)
-                .overlay(Circle().fill(Color.black.opacity(0.28)))
+            disc
                 .padding(ringWidth * 2)
             if let brandIconPath {
                 SVGPathShape(pathData: brandIconPath)
@@ -34,7 +40,7 @@ struct LogoMark: View {
                     .frame(width: size * 0.44, height: size * 0.44)
             } else {
                 Image(systemName: symbolName)
-                    .font(.system(size: size * 0.34, weight: .medium))
+                    .font(.system(size: size * 0.34, weight: onDark ? .semibold : .medium))
                     .foregroundStyle(color)
             }
         }
@@ -48,5 +54,20 @@ struct LogoMark: View {
         }
         .shadow(color: isSelected ? color.opacity(0.55) : .clear, radius: 7)
         .animation(.easeInOut(duration: 0.3), value: percent)
+    }
+
+    /// The disc the glyph sits on: frosted glass on the rail/overlay, a clean
+    /// dark chip lifted just off black on the notch island.
+    @ViewBuilder
+    private var disc: some View {
+        if onDark {
+            Circle()
+                .fill(Color(white: 0.13))
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.06), lineWidth: 0.5))
+        } else {
+            Circle()
+                .fill(.ultraThinMaterial)
+                .overlay(Circle().fill(Color.black.opacity(0.28)))
+        }
     }
 }

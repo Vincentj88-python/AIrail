@@ -91,8 +91,9 @@ struct NotchView: View {
             Color.clear.frame(height: ui.notchSize.height)
             NotchMarksRow(manager: manager, ui: ui, reduceMotion: reduceMotion, onSelect: onSelect)
                 .padding(.horizontal, NotchWindowController.islandPadding)
-                .padding(.top, 8)
-                .padding(.bottom, 14)
+                .padding(.top, 6)
+                .padding(.bottom, 12)
+                .frame(maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity)
         .background(islandShape.fill(Color.black))
@@ -150,7 +151,8 @@ private struct NotchMarksRow: View {
                 brandIconPath: info.brandIconPath,
                 percent: snapshot?.ringPercent,
                 size: NotchWindowController.markSize,
-                isSelected: ui.selectedProviderId == info.id
+                isSelected: ui.selectedProviderId == info.id,
+                onDark: true
             )
         }
         .buttonStyle(.plain)

@@ -16,8 +16,8 @@ final class NotchWindowController {
     static let hairlineZone: CGFloat = 10
     static let markSize: CGFloat = 40
     static let markSpacing: CGFloat = 12
-    static let islandPadding: CGFloat = 18
-    static let islandBodyHeight: CGFloat = markSize + 26
+    static let islandPadding: CGFloat = 20
+    static let islandBodyHeight: CGFloat = markSize + 18
 
     private let panel: RailPanel
     private let settings: AppSettings

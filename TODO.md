@@ -98,6 +98,15 @@ retrying every 60s. Stale numbers stay on screen; the account page's Refresh
 button forces through the backoff. Per-account token, so per-user rate limits —
 one user at 60s is fine; the burst was the cause.
 
+## Notch/island mark polish (2026-09-02)
+
+First render of the island read as loading spinners: `LogoMark`'s ring track
+was `color.opacity(0.2)`, invisible on black, so a partial arc looked like a
+spinner. Added `onDark` to `LogoMark` — a white base ring + brighter colour
+track so the gauge always reads as a full circle, a clean `Color(white:0.13)`
+chip instead of the frosted disc (muddy on black), heavier glyph. Island body
+tightened (`markSize + 18`). Rail/overlay marks unchanged (glass path kept).
+
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).
