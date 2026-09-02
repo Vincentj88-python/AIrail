@@ -97,6 +97,21 @@ Launch flags for development: `--settings[=accounts]` opens Settings, `--add-acc
 
 AIrail is distributed as a signed DMG and source on GitHub, not through the App Store.
 
+## Releasing & updates
+
+AIrail checks for updates itself: **right-click the rail → Check for Updates…** (also in the HUD's ⋯ menu), and it looks once a day in the background. When a newer GitHub release exists it shows the notes and a Download button. This starts working once the repo is public; while it's private the check just reports "up to date."
+
+To publish a new version:
+
+```
+# bump MARKETING_VERSION in the app target, commit, then:
+git tag v0.2.1 && git push origin v0.2.1
+./scripts/release.sh                       # builds dist/AIrail-0.2.1.dmg
+gh release create v0.2.1 dist/AIrail-0.2.1.dmg --title "v0.2.1" --notes "…"
+```
+
+Users then see the update on their next check and download the new DMG. (Seamless one-click, in-place updates — no re-download — come with [Sparkle](https://sparkle-project.org) once the app is notarized and public; the checker is the interim.)
+
 ## Tests
 
 Unit tests cover the snapshot math, the accounts model, every provider's parser (against fixtures of the real response shapes), the incremental transcript scanner, and the demo-data engine:

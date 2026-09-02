@@ -54,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         applyPosition()
         providerManager.start()
+        UpdateChecker.checkInBackgroundIfDue()
 
         if let providerId = LaunchOptions.overlayProviderId {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak overlay] in

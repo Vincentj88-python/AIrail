@@ -205,6 +205,22 @@ card/island spring is seen. Kept the Dock-magnify-on-hover.
   pointing at the release DMG, and Sparkle auto-updates via a GitHub Pages
   appcast.
 
+## App icon + update checker (2026-09-02)
+
+- **Icon**: `Sources/AIrail/Assets.xcassets/AppIcon.appiconset`, rendered by a
+  Core Graphics script (dark glass squircle, glowing periwinkle rail, three
+  provider dots). Wired via `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`.
+  MARKETING_VERSION bumped to 0.2.0.
+- **UpdateChecker** (`Providers/Support/UpdateChecker.swift`): reads the repo's
+  latest GitHub release, compares to the bundle version, notifies + hands off
+  the DMG download. "Check for Updates…" in all menus + a daily quiet check.
+  No in-place self-replace (deliberate — that's Sparkle's job). Returns 404 /
+  "up to date" while the repo is private; activates when public.
+- **Sparkle** is the go-public upgrade for true one-click in-place updates:
+  add the SPM dependency, an EdDSA key (public key in Info.plist), an appcast
+  feed (GitHub Pages or a public releases repo), and swap the checker's
+  "Download" for Sparkle's updater. Needs the public feed + notarization.
+
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).

@@ -88,6 +88,9 @@ struct OverlayView: View {
                     NSApp.activate(ignoringOtherApps: true)
                     openSettings()
                 }
+                Button("Check for Updates…") {
+                    UpdateChecker.checkForUpdates()
+                }
                 Divider()
                 Button("Quit AIrail") {
                     NSApp.terminate(nil)
