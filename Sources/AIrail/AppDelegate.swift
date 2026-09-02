@@ -61,13 +61,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        settings.$position
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.overlayController?.close()
-                self?.applyPosition()
-            }
-            .store(in: &cancellables)
+        Publishers.Merge(
+            settings.$position.dropFirst().map { _ in () },
+            settings.$railDisplay.dropFirst().map { _ in () }
+        )
+        .sink { [weak self] in
+            self?.overlayController?.close()
+            self?.applyPosition()
+        }
+        .store(in: &cancellables)
 
         // Rail membership follows the connected accounts and their show-on-rail toggles.
         Publishers.Merge(

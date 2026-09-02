@@ -1,0 +1,39 @@
+import AppKit
+
+/// Which display the edge rail lives on. A rail only works on an edge the
+/// pointer actually stops at, so "Automatic" picks the outer edge of the whole
+/// arrangement for the chosen side — never a seam between two displays.
+enum ScreenSelection {
+    static let automatic = "auto"
+
+    static func railScreen(preference: String, side: AppSettings.RailSide) -> NSScreen? {
+        let screens = NSScreen.screens
+        if preference != automatic, let named = screens.first(where: { $0.localizedName == preference }) {
+            return named
+        }
+        return outerScreen(side: side, among: screens)
+    }
+
+    /// Leftmost (or rightmost) display; the taller one wins a tie so the rail
+    /// has room. `NSScreen.main` is the fallback when nothing is attached.
+    static func outerScreen(side: AppSettings.RailSide, among screens: [NSScreen]) -> NSScreen? {
+        guard let index = outerIndex(side: side, frames: screens.map(\.frame)) else { return NSScreen.main }
+        return screens[index]
+    }
+
+    static func outerIndex(side: AppSettings.RailSide, frames: [NSRect]) -> Int? {
+        let indexed = Array(frames.enumerated())
+        switch side {
+        case .left:
+            return indexed.min { ($0.element.minX, -$0.element.height) < ($1.element.minX, -$1.element.height) }?.offset
+        case .right:
+            return indexed.max { ($0.element.maxX, $0.element.height) < ($1.element.maxX, $1.element.height) }?.offset
+        }
+    }
+
+    /// Names for the Settings popup, in the order macOS lists the displays.
+    static var displayNames: [String] {
+        var seen: Set<String> = []
+        return NSScreen.screens.map(\.localizedName).filter { seen.insert($0).inserted }
+    }
+}

@@ -78,9 +78,23 @@ fixed working-day curve.
   the left edge when no notch is attached; `railSide` is now derived from
   `position`. Adding a platform = one `KeyedPlatform` entry + a fixture test.
 
+## Multi-display fix (2026-09-02, late)
+
+The rail used `NSScreen.screens.first` (the menu-bar display). On Vincent's
+desk — Dell | ultrawide (main) | MacBook — "Left" landed on the seam at x=0
+and "Right" on the seam at x=3440, where the pointer just crosses to the next
+display. `ScreenSelection` now picks the outer edge of the whole arrangement
+(leftmost/rightmost display, taller wins ties), with Settings › Rail ›
+Display to override by name (`AppSettings.railDisplay`). Notch mode is
+unaffected: the island only ever lives on the notched display.
+
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).
+- [ ] Possible "Island" position: a Dynamic Island-style pill at the top
+      centre of any display (no notch needed) — for people whose main display
+      is external. Vincent's first reaction to notch mode was that the
+      multi-monitor positioning felt off; ask before building.
 - [ ] Notch polish: island top corners where it grows wider than the notch;
       consider a "Both" position (island on the MacBook, rail on externals).
 - [ ] AIrail's own Keychain items suffer the same ad-hoc-signing re-prompt as

@@ -78,6 +78,19 @@ private struct GeneralPane: View {
 private struct RailPane: View {
     @ObservedObject var settings: AppSettings
 
+    private var displayNames: [String] { ScreenSelection.displayNames }
+
+    /// Automatic means the outer edge of the whole desktop, so the pointer can
+    /// actually rest on the hairline instead of sliding onto the next display.
+    private var displayFooter: String {
+        let side = settings.railSide == .left ? "left" : "right"
+        let chosen = ScreenSelection.railScreen(preference: settings.railDisplay, side: settings.railSide)?.localizedName ?? "—"
+        if settings.railDisplay == ScreenSelection.automatic {
+            return "Automatic uses the outer \(side) edge of your whole desktop — currently \(chosen) — so the pointer stops on the rail instead of crossing onto the next display."
+        }
+        return "The rail sits on the \(side) edge of \(chosen). If another display continues past that edge, the pointer will cross over it; Automatic avoids that."
+    }
+
     /// Notch is only offered while a notched display is attached (a stored
     /// choice still shows so it can be changed).
     private var availablePositions: [AppSettings.RailPosition] {
@@ -101,6 +114,19 @@ private struct RailPane: View {
                     Text("Notch folds the rail into the MacBook's notch: a hairline under it, a Dynamic Island-style row of marks on hover. Falls back to the left edge when no notched display is attached.")
                 } else {
                     Text("Notch position appears here when a MacBook display with a notch is attached.")
+                }
+            }
+            if settings.position != .notch, displayNames.count > 1 {
+                Section {
+                    Picker("Display", selection: $settings.railDisplay) {
+                        Text("Automatic").tag(ScreenSelection.automatic)
+                        Divider()
+                        ForEach(displayNames, id: \.self) { name in
+                            Text(name).tag(name)
+                        }
+                    }
+                } footer: {
+                    Text(displayFooter)
                 }
             }
             Section {

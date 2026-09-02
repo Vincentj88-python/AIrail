@@ -138,6 +138,21 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(reloaded.railSide, .left, "notch mode's edge fallback is the left")
     }
 
+    func testAutomaticRailDisplayIsTheOuterEdge() {
+        // Vincent's desk: Dell | ultrawide (main) | MacBook, left to right.
+        let dell = NSRect(x: -1920, y: 360, width: 1920, height: 1080)
+        let ultrawide = NSRect(x: 0, y: 0, width: 3440, height: 1440)
+        let macbook = NSRect(x: 3440, y: -52, width: 1800, height: 1169)
+        let frames = [ultrawide, macbook, dell]
+        XCTAssertEqual(ScreenSelection.outerIndex(side: .left, frames: frames), 2, "left means the Dell's left edge, not the seam at x=0")
+        XCTAssertEqual(ScreenSelection.outerIndex(side: .right, frames: frames), 1, "right means the MacBook's right edge")
+
+        // Stacked displays share an x range: the taller one gets the rail.
+        let stacked = [NSRect(x: 0, y: 0, width: 1800, height: 1169), NSRect(x: 0, y: 1169, width: 1800, height: 1440)]
+        XCTAssertEqual(ScreenSelection.outerIndex(side: .left, frames: stacked), 1)
+        XCTAssertNil(ScreenSelection.outerIndex(side: .left, frames: []))
+    }
+
     @MainActor
     func testRailMembershipFollowsAccounts() {
         let suite = "AIrailTests.\(UUID().uuidString)"

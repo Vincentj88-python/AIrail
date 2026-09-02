@@ -19,6 +19,7 @@ final class AppSettings: ObservableObject {
     private enum Key {
         static let railSide = "railSide"
         static let railPosition = "railPosition"
+        static let railDisplay = "railDisplay"
         static let autoHideDelay = "autoHideDelay"
         static let refreshInterval = "refreshInterval"
         static let connectedAccounts = "connectedAccounts"
@@ -37,6 +38,11 @@ final class AppSettings: ObservableObject {
     /// notched display is around.
     var railSide: RailSide {
         position == .right ? .right : .left
+    }
+    /// A display's name, or `ScreenSelection.automatic` for the outer edge of
+    /// the whole arrangement.
+    @Published var railDisplay: String {
+        didSet { defaults.set(railDisplay, forKey: Key.railDisplay) }
     }
     @Published var autoHideDelay: Double {
         didSet { defaults.set(autoHideDelay, forKey: Key.autoHideDelay) }
@@ -65,6 +71,7 @@ final class AppSettings: ObservableObject {
             // v0.1 stored only a side.
             position = defaults.string(forKey: Key.railSide) == "right" ? .right : .left
         }
+        railDisplay = defaults.string(forKey: Key.railDisplay) ?? ScreenSelection.automatic
         autoHideDelay = defaults.object(forKey: Key.autoHideDelay) as? Double ?? 0.3
         refreshInterval = defaults.object(forKey: Key.refreshInterval) as? Double ?? 60
         connectedAccountIds = Set(defaults.stringArray(forKey: Key.connectedAccounts) ?? [])

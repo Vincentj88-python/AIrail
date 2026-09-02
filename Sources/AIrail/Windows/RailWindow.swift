@@ -138,7 +138,9 @@ final class RailWindowController {
     }
 
     private func frame(expanded: Bool) -> NSRect {
-        guard let screen = NSScreen.screens.first ?? NSScreen.main else { return .zero }
+        guard let screen = ScreenSelection.railScreen(preference: settings.railDisplay, side: settings.railSide) else {
+            return .zero
+        }
         let visible = screen.visibleFrame
         // Unobtrusive: ~38% of the screen, but always tall enough for the
         // expanded card (44 pt logos + 14 pt gaps + card padding + margin).
