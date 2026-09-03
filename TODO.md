@@ -1,8 +1,39 @@
 # AIrail — TODO / where we left off
 
-_Last updated: 2026-09-02. v2 accounts + live data + card detail landed
-(uncommitted at time of writing — review, then commit). Settings is now
-General · Rail · Accounts; four of five providers read real numbers._
+_Last updated: 2026-09-03. **v0.2.0 is feature-complete and all pushed** to the
+(now private) GitHub repo; running from `/Applications` on this Mac. Below is
+where we left off; the dated sections further down are the running log of how
+each piece was built and why._
+
+## Where things stand (resume here)
+
+- **Shipped in v0.2.0:** accounts (borrow each tool's existing sign-in,
+  read-only) with live data for Claude, Codex (covers ChatGPT), Copilot,
+  Cursor; `Other…` API-key platforms; the overlay card (rings, meters,
+  24h/7-day chart, by-model/project, activity); Left/Right/Notch/Island
+  placement with per-display choice; frosted-glass styling + one-motion reveal;
+  the four insights (burn-rate, notifications, ambient rail colour,
+  API-equivalent value priced live from OpenRouter); app icon; in-app update
+  checker. 44 tests green.
+- **Distribution:** repo **private**; `v0.2.0` is a **draft** GitHub release
+  with the signed DMG attached. `./scripts/release.sh` builds the DMG (signed
+  with the local "AIrail Dev" cert). Install = download DMG, drag, one-time
+  right-click → Open.
+- **The one external blocker:** no Apple Developer account ($99/yr). It gates
+  notarization (→ no first-launch warning) and Sparkle (→ true one-click
+  in-place updates). Everything else is done and free. When it's in hand:
+  notarize in `release.sh`, add Sparkle, flip the repo public, publish the
+  release — all drop-ins, documented below.
+
+## Next up (when we resume)
+
+- [ ] Verify the four **keyed platforms** (OpenRouter/DeepSeek/Anthropic API/
+      OpenAI API) against real API keys — parsers are fixture-tested only.
+- [ ] **Gemini** provider — find a dependable quota read.
+- [ ] Go-public checklist: Apple Developer ID → notarize → Sparkle → repo
+      public → publish `v0.2.0` (or cut `v0.3.0`).
+- [ ] Optional niceties floated but not built: a shareable "week in AI" recap
+      card; per-account history for Copilot (no local feed).
 
 ## Decisions made (2026-09-02)
 
