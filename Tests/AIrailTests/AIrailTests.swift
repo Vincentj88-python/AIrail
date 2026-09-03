@@ -206,6 +206,13 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(manager.connectablePlatformInfos.map(\.id), ["deepseek", "anthropic-api", "openai-api"])
     }
 
+    func testTemporaryKeychainErrorIsTransient() {
+        let err = ConnectionError.temporarilyUnavailable(tool: "Claude Code")
+        XCTAssertTrue(err.isTransient, "a Keychain hiccup keeps the last real numbers and retries")
+        XCTAssertEqual(err.shortDescription, "Reading sign-in — retrying")
+        XCTAssertTrue(err.errorDescription?.contains("Keychain") == true)
+    }
+
     func testRateLimitErrorIsTransientAndReadsRetryAfter() {
         let soon = Date().addingTimeInterval(300)
         let err = ConnectionError.rateLimited(tool: "Claude Code", retryAfter: soon)

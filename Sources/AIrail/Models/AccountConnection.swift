@@ -29,6 +29,9 @@ enum ConnectionError: LocalizedError, Sendable {
     case missingKey(platform: String)
     case invalidKey(platform: String, hint: String?)
     case rateLimited(tool: String, retryAfter: Date?)
+    /// A read that should just be retried — the Keychain is mid-unlock after
+    /// login, or the tool is rotating its credential right now.
+    case temporarilyUnavailable(tool: String)
     case unreadable(String)
     case network(String)
     case unsupported
@@ -50,6 +53,8 @@ enum ConnectionError: LocalizedError, Sendable {
         case .rateLimited(let tool, let retryAfter):
             let when = retryAfter.map { " Trying again " + UsageFormatting.clockString($0) + "." } ?? " Trying again shortly."
             return "\(tool) is limiting how often usage can be checked." + when
+        case .temporarilyUnavailable(let tool):
+            return "Couldn't read the \(tool) sign-in just now (the Keychain may be locking after sleep). AIrail will keep trying."
         case .unreadable(let detail):
             return "Couldn't read the local data: \(detail)"
         case .network(let detail):
@@ -69,6 +74,7 @@ enum ConnectionError: LocalizedError, Sendable {
         case .missingKey: return "No API key stored"
         case .invalidKey: return "API key rejected"
         case .rateLimited: return "Checked too often — waiting"
+        case .temporarilyUnavailable: return "Reading sign-in — retrying"
         case .unreadable: return "Couldn't read local data"
         case .network: return "Couldn't reach service"
         case .unsupported: return "Not supported yet"
@@ -79,7 +85,7 @@ enum ConnectionError: LocalizedError, Sendable {
     /// we just couldn't refresh) as opposed to one that means the data is gone.
     var isTransient: Bool {
         switch self {
-        case .expired, .network, .accessDenied, .rateLimited: return true
+        case .expired, .network, .accessDenied, .rateLimited, .temporarilyUnavailable: return true
         case .notInstalled, .notSignedIn, .missingKey, .invalidKey, .unreadable, .unsupported: return false
         }
     }

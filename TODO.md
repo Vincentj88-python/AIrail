@@ -240,6 +240,21 @@ Four data-mining features on top of what's already collected:
   Verified live: the estimate for the current week jumped from a placeholder
   to a real figure. Labelled "est." in the UI.
 
+## Claude Keychain hiccup handled (2026-09-03)
+
+Morning error "Couldn't read the local data: An invalid record was encountered"
+then a forced manual refresh. Cause: Claude is the only provider reading a
+macOS Keychain item (others read files / shell out to `gh`), so only it is
+exposed to the login Keychain locking after sleep and to Claude Code rotating
+its credential — both make a read momentarily fail. That transient failure was
+filed as a permanent `.unreadable`, blanking the account and requiring a manual
+refresh. Fix: `KeychainReader` retries 3× (150 ms), and a persistent odd status
+becomes `.temporarilyUnavailable` (transient) — the last good numbers stay as
+`stale` and the next refresh recovers on its own. Prompt-related statuses
+(auth/cancel/interaction) stay `.accessDenied` (transient, no retry, so the
+dialog isn't hammered). The re-authorization prompt itself is inherent to
+Claude Code recreating its Keychain item on rotation and can't be suppressed.
+
 ## Next up
 
 - [ ] Verify the four keyed platforms against real keys (see above).
