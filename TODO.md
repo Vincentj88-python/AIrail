@@ -21,8 +21,17 @@ and work/personal accounts; v0.3.0 = blocks A + B + E plus the first three C
 items; usage ledger on disk yes; stay dark-only). **Constraint:** the Apple
 Developer ID waits until AIrail has earned the $99, so the go-public step is a
 free soft launch with a Sponsors goal first, notarization + licence + Show HN
-after (see "Order of work" in `ROADMAP.md`). Work started on branch
-`tier1-block-a`.
+after (see "Order of work" in `ROADMAP.md`).
+
+**Block A done (2026-09-06/07)** on branch `tier1-block-a`: all ten items
+built, each reviewed by a second agent, plus a polish pass over the reviewers'
+findings; the dated sections below record each one. Everything is **staged,
+not committed** (commit per item or in one go, your call). Test suite: 44 →
+72 green, 5 live tests skipped as before, and no test touches the network any
+more. **By hand at v0.3.0:** re-create the "AIrail Dev" certificate with
+10-year validity (one Claude Keychain re-prompt), and check the General pane's
+height (320 → 380 is unverified). **Next:** block B, starting with
+`locale-formatting-live-countdowns` (the formatter everything else reads).
 
 Things established that reverse or extend earlier notes:
 
