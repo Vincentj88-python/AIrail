@@ -62,6 +62,41 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Don't build: caps, forecasts, idle flag; fix the spend footer (2026-09-06)
+
+- **Three cuts, for the record.** No AIrail-set soft caps: no cap is
+  reachable through any read-only endpoint AIrail uses (Cursor's spend cap,
+  Copilot's budgets, the Anthropic/OpenAI org limits all live behind their
+  dashboards), so a cap set here would disagree with the platform's, and it
+  would need per-account preferences and daily history that don't exist. No
+  month-end bill projection: slope-fitting a month from a week is a guess
+  wearing a dollar sign (principle 4); block B's pace item is arithmetic on
+  server truth instead. No idle-subscription flag ("you haven't used Claude
+  in 12 days"): a nag, not peripheral vision, and it needs the ledger anyway.
+  `ROADMAP.md` lists all three under "Cut".
+- **What was wrong:** the footer captioned every spend figure "SPEND (SEP)".
+  OpenRouter's `usage` is all time, and its ring was that lifetime figure
+  over a key limit that may reset daily, weekly or monthly.
+- **Fix:** `UsageSnapshot.spendPeriod` (`SpendPeriod`: month, billingCycle,
+  lifetime, keyLimit) names the window; the footer caption and its VoiceOver
+  label switch on it ("SPEND (SEP)", "SPEND (THIS CYCLE)", "SPEND (ALL
+  TIME)", "SPEND (KEY LIMIT)"). OpenRouter's ring is now
+  `(limit − limit_remaining) / limit`, what OpenRouter itself counts, and the
+  footer pairs a figure only with a cap measured over the same window: this
+  UTC month (`usage_monthly`) for an open key or a monthly budget, the key's
+  own budget when it resets on another clock or never, the lifetime total
+  only when the answer has no monthly figure. Cursor tags its billing cycle;
+  Claude usage credits and the two org cost reports stay month-to-date.
+- **Money follows the locale:** `UsageFormatting.dollars`/`credits` use
+  `.currency(code:).locale(locale)` — "$12.50" here, "US$12.50" on an en_GB
+  Mac, "CN¥88.00" for a DeepSeek yuan balance. Tests pin en_US and en_GB.
+  Dates and durations wait for block B's locale item.
+- **By hand, Vincent:** nothing required. One live run with
+  `TEST_RUNNER_AIRAIL_OPENROUTER_KEY` would confirm `usage_monthly` and
+  `limit_reset` on a real key (the docs list both); a nicety, not a gate.
+- 69 tests green (+2): the four OpenRouter key shapes, Cursor's tag, money
+  in two locales and the four captions.
+
 ## Quiet the update check (2026-09-06)
 
 - **What was wrong:** the release check ran once, at launch, and when it

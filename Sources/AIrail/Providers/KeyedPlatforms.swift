@@ -102,22 +102,31 @@ extension KeyedPlatform {
 // MARK: - OpenRouter
 
 enum OpenRouterUsage {
-    /// `/auth/key`: `{"data": {"label", "usage", "limit", "limit_remaining", "is_free_tier"}}`;
+    /// `/auth/key`: `{"data": {"label", "usage", "usage_monthly", "limit", "limit_remaining",
+    /// "limit_reset", "is_free_tier"}}` — `usage` is all time, `usage_monthly` the current UTC
+    /// month, `limit_reset` "daily"/"weekly"/"monthly" or null for a limit that never resets;
     /// `/credits`: `{"data": {"total_credits", "total_usage"}}`. All amounts in USD.
     static func snapshot(keyData: Data, creditsData: Data?, providerId: String, displayName: String, now: Date = Date()) throws -> UsageSnapshot {
         guard let key = try JSONObject(data: keyData)["data"] else {
             throw ConnectionError.unreadable("no key data in response")
         }
         let usage = key.double("usage") ?? 0
-        let limit = key.double("limit")
+        let monthly = key.double("usage_monthly")
+        let limit = key.double("limit").flatMap { $0 > 0 ? $0 : nil }
+        let limitReset = key.string("limit_reset")
+        // What OpenRouter itself counts against the key's limit. `usage` is
+        // all time and keeps growing across a daily, weekly or monthly reset.
+        let againstLimit = limit.map { limit in
+            key.double("limit_remaining").map { max(0, limit - $0) } ?? usage
+        }
         let credits = creditsData.flatMap { try? JSONObject(data: $0)["data"] }
         let totalCredits = credits?.double("total_credits")
         let totalUsage = credits?.double("total_usage")
 
         var percent: Double?
         var period = "key limit"
-        if let limit, limit > 0 {
-            percent = UsageSnapshot.clampPercent(usage / limit * 100)
+        if let limit, let againstLimit {
+            percent = UsageSnapshot.clampPercent(againstLimit / limit * 100)
         } else if let totalCredits, totalCredits > 0, let totalUsage {
             percent = UsageSnapshot.clampPercent(totalUsage / totalCredits * 100)
             period = "credits"
@@ -125,8 +134,22 @@ enum OpenRouterUsage {
         var snapshot = UsageSnapshot.empty(providerId: providerId, displayName: displayName, status: .ok)
         snapshot.weeklyPercent = percent
         snapshot.periodLabel = period
-        snapshot.spend = usage
-        snapshot.spendCap = limit
+        // The footer pairs a figure only with a cap measured over the same
+        // window: this UTC month for an open key or a monthly budget, the
+        // key's own budget when it resets on some other clock or never, and
+        // everything ever spent on an answer without `usage_monthly`.
+        if let monthly, limit == nil || limitReset == "monthly" {
+            snapshot.spend = monthly
+            snapshot.spendCap = limit
+            snapshot.spendPeriod = .month
+        } else if let limit, let againstLimit {
+            snapshot.spend = againstLimit
+            snapshot.spendCap = limit
+            snapshot.spendPeriod = .keyLimit
+        } else {
+            snapshot.spend = usage
+            snapshot.spendPeriod = .lifetime
+        }
         if let totalCredits, let totalUsage {
             snapshot.credits = max(0, totalCredits - totalUsage)
             snapshot.creditsCurrency = "USD"

@@ -499,6 +499,16 @@ final class AIrailTests: XCTestCase {
         XCTAssertThrowsError(try CursorUsage.parse(Data("{}".utf8)))
     }
 
+    func testCursorSnapshotBillsByCycle() throws {
+        let report = CursorUsage.Report(percentUsed: 1.45, autoPercentUsed: nil, apiPercentUsed: nil, autoMessage: nil, apiMessage: nil, cycleEnd: Date(timeIntervalSince1970: 1_790_316_019), plan: "Pro+")
+        let credential = CursorUsage.Credential(userId: "user_1", accessToken: "t", expiresAt: nil, email: "v@example.com", plan: nil)
+        let snapshot = CursorUsage.snapshot(report: report, credential: credential, detail: UsageDetail(), providerId: "cursor", displayName: "Cursor")
+        XCTAssertEqual(snapshot.spendPeriod, .billingCycle, "whatever fills spend later is measured over the billing cycle")
+        XCTAssertEqual(snapshot.periodLabel, "billing cycle")
+        XCTAssertEqual(snapshot.weeklyResetsAt, report.cycleEnd)
+        XCTAssertNil(snapshot.spend, "the summary endpoint reports no spend today")
+    }
+
     func testCursorEventsBuildChartsAndModelShares() throws {
         let now = Date()
         let calendar = Calendar.current
@@ -543,17 +553,46 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(snapshot.periodLabel, "key limit")
         XCTAssertEqual(snapshot.spend, 12.5)
         XCTAssertEqual(snapshot.spendCap, 50)
+        XCTAssertEqual(snapshot.spendPeriod, .keyLimit, "a limit that never resets is the key's own budget")
         XCTAssertEqual(snapshot.credits, 59.75)
         XCTAssertEqual(snapshot.creditsCurrency, "USD")
         XCTAssertEqual(snapshot.account, "laptop")
         XCTAssertNil(snapshot.plan)
         XCTAssertEqual(snapshot.status, .ok)
 
+        // A weekly-resetting limit: `usage` is all time and already past the
+        // limit, `limit_remaining` is what OpenRouter counts this week.
+        let weeklyKey = #"{"data":{"label":"w","usage":120,"usage_monthly":4.2,"limit":50,"limit_remaining":40,"limit_reset":"weekly"}}"#
+        let weekly = try OpenRouterUsage.snapshot(keyData: Data(weeklyKey.utf8), creditsData: nil, providerId: "openrouter", displayName: "OpenRouter")
+        XCTAssertEqual(weekly.weeklyPercent, 20, "the ring is what's used of the limit, not lifetime usage")
+        XCTAssertEqual(weekly.spend, 10)
+        XCTAssertEqual(weekly.spendCap, 50)
+        XCTAssertEqual(weekly.spendPeriod, .keyLimit, "a monthly figure must not sit under a weekly cap")
+        XCTAssertNil(weekly.credits)
+
+        let monthlyKey = #"{"data":{"label":"m","usage":120,"usage_monthly":4.2,"limit":50,"limit_remaining":45.8,"limit_reset":"monthly"}}"#
+        let monthly = try OpenRouterUsage.snapshot(keyData: Data(monthlyKey.utf8), creditsData: nil, providerId: "openrouter", displayName: "OpenRouter")
+        XCTAssertEqual(monthly.weeklyPercent!, 8.4, accuracy: 0.001)
+        XCTAssertEqual(monthly.spend, 4.2, "a monthly budget pairs with this month's spend")
+        XCTAssertEqual(monthly.spendCap, 50)
+        XCTAssertEqual(monthly.spendPeriod, .month)
+
+        let openKey = #"{"data":{"label":"o","usage":120,"usage_monthly":4.2,"limit":null,"limit_remaining":null,"limit_reset":null,"is_free_tier":false}}"#
+        let open = try OpenRouterUsage.snapshot(keyData: Data(openKey.utf8), creditsData: Data(credits.utf8), providerId: "openrouter", displayName: "OpenRouter")
+        XCTAssertEqual(open.weeklyPercent!, 40.25, accuracy: 0.001, "without a key limit the ring is credits used")
+        XCTAssertEqual(open.periodLabel, "credits")
+        XCTAssertEqual(open.spend, 4.2, "an open key shows this UTC month, not everything ever spent")
+        XCTAssertNil(open.spendCap)
+        XCTAssertEqual(open.spendPeriod, .month)
+
         let unlimitedKey = #"{"data":{"label":"k","usage":3,"limit":null,"is_free_tier":true}}"#
         let noLimit = try OpenRouterUsage.snapshot(keyData: Data(unlimitedKey.utf8), creditsData: Data(credits.utf8), providerId: "openrouter", displayName: "OpenRouter")
-        XCTAssertEqual(noLimit.weeklyPercent!, 40.25, accuracy: 0.001, "without a key limit the ring is credits used")
+        XCTAssertEqual(noLimit.weeklyPercent!, 40.25, accuracy: 0.001)
         XCTAssertEqual(noLimit.periodLabel, "credits")
         XCTAssertEqual(noLimit.plan, "Free tier")
+        XCTAssertEqual(noLimit.spend, 3, "no monthly figure: the lifetime total, labelled as such")
+        XCTAssertEqual(noLimit.spendPeriod, .lifetime)
+        XCTAssertNil(noLimit.spendCap)
         XCTAssertThrowsError(try OpenRouterUsage.snapshot(keyData: Data("{}".utf8), creditsData: nil, providerId: "openrouter", displayName: "OpenRouter"))
     }
 
@@ -563,10 +602,28 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(snapshot.credits, 12.34, "USD balance preferred when present")
         XCTAssertEqual(snapshot.creditsCurrency, "USD")
         XCTAssertNil(snapshot.ringPercent, "a balance has no limit to ring")
-        XCTAssertEqual(UsageFormatting.credits(12.34, currency: "USD"), "$12.34")
-        XCTAssertEqual(UsageFormatting.credits(88, currency: "CNY"), "¥88.00")
-        XCTAssertEqual(UsageFormatting.credits(8760, currency: nil), 8760.formatted())
+        XCTAssertNil(snapshot.spend)
         XCTAssertThrowsError(try DeepSeekUsage.snapshot(data: Data(#"{"is_available":false,"balance_infos":[]}"#.utf8), providerId: "deepseek", displayName: "DeepSeek"))
+    }
+
+    func testMoneyFollowsTheLocaleAndSpendCaptionsNameTheWindow() {
+        let us = Locale(identifier: "en_US")
+        let gb = Locale(identifier: "en_GB")
+        XCTAssertEqual(UsageFormatting.dollars(12.5, locale: us), "$12.50")
+        XCTAssertEqual(UsageFormatting.dollars(1234.5, locale: us), "$1,234.50")
+        XCTAssertEqual(UsageFormatting.dollars(12.5, locale: gb), "US$12.50", "the code is fixed, the symbol follows the locale")
+        XCTAssertEqual(UsageFormatting.credits(12.34, currency: "USD", locale: us), "$12.34")
+        XCTAssertEqual(UsageFormatting.credits(88, currency: "CNY", locale: us), "CN¥88.00")
+        XCTAssertEqual(UsageFormatting.credits(88, currency: "cny", locale: us), "CN¥88.00", "lowercase codes are still codes")
+        XCTAssertEqual(UsageFormatting.credits(8760, currency: nil, locale: us), "8,760")
+
+        let now = Date()
+        XCTAssertEqual(UsageFormatting.spendCaption(.month, now: now), "SPEND (\(UsageFormatting.currentMonthAbbreviation(now)))")
+        XCTAssertEqual(UsageFormatting.spendCaption(.billingCycle), "SPEND (THIS CYCLE)")
+        XCTAssertEqual(UsageFormatting.spendCaption(.lifetime), "SPEND (ALL TIME)")
+        XCTAssertEqual(UsageFormatting.spendCaption(.keyLimit), "SPEND (KEY LIMIT)")
+        XCTAssertEqual(UsageFormatting.spendLabel(.lifetime), "Spend, all time")
+        XCTAssertEqual(UsageSnapshot.empty(providerId: "x", displayName: "X", status: .ok).spendPeriod, .month, "month-to-date is the default every org cost report uses")
     }
 
     func testAnthropicAPISnapshot() throws {

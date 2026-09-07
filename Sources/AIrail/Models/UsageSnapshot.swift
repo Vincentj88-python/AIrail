@@ -9,6 +9,13 @@ enum UsageStatus: String, Sendable {
     }
 }
 
+/// The window a snapshot's `spend` covers, so the footer can name it: a
+/// calendar month, the plan's billing cycle, everything the account ever
+/// spent, or what an API key has used of its own limit.
+enum SpendPeriod: String, Sendable {
+    case month, billingCycle, lifetime, keyLimit
+}
+
 struct UsageSnapshot: Identifiable, Sendable {
     var id: String { providerId }
     var providerId: String
@@ -23,6 +30,8 @@ struct UsageSnapshot: Identifiable, Sendable {
     var creditsCurrency: String? = nil
     var spend: Double?
     var spendCap: Double?
+    /// What `spend` (and `spendCap`, when there is one) is measured over.
+    var spendPeriod: SpendPeriod = .month
     var plan: String?
     var status: UsageStatus
     var lastUpdated: Date
@@ -164,19 +173,38 @@ enum UsageFormatting {
         }
     }
 
-    static func dollars(_ value: Double) -> String {
-        String(format: "$%.2f", value)
+    /// US dollars the way the user's locale writes them: "$12.50" here,
+    /// "US$12.50" in Britain, "12,50 $" in Germany. Every spend and estimate
+    /// AIrail shows is USD; the code, not the symbol, is what's fixed.
+    static func dollars(_ value: Double, locale: Locale = .autoupdatingCurrent) -> String {
+        value.formatted(.currency(code: "USD").locale(locale))
     }
 
-    /// Credits as a count ("8,760") or, with a currency, as money ("$12.34", "¥88.00").
-    static func credits(_ value: Double, currency: String?) -> String {
-        guard let currency else { return Int(value).formatted() }
-        switch currency.uppercased() {
-        case "USD": return String(format: "$%.2f", value)
-        case "EUR": return String(format: "€%.2f", value)
-        case "GBP": return String(format: "£%.2f", value)
-        case "CNY": return String(format: "¥%.2f", value)
-        default: return String(format: "%.2f %@", value, currency.uppercased())
+    /// Credits as a count ("8,760") or, with a currency, as money ("$12.34",
+    /// "CN¥88.00"), both in the user's locale.
+    static func credits(_ value: Double, currency: String?, locale: Locale = .autoupdatingCurrent) -> String {
+        guard let currency else { return Int(value).formatted(.number.locale(locale)) }
+        return value.formatted(.currency(code: currency.uppercased()).locale(locale))
+    }
+
+    /// The footer's caption over a spend figure, naming the window it covers:
+    /// "SPEND (SEP)", "SPEND (THIS CYCLE)", "SPEND (ALL TIME)", "SPEND (KEY LIMIT)".
+    static func spendCaption(_ period: SpendPeriod, now: Date = Date()) -> String {
+        switch period {
+        case .month: return "SPEND (\(currentMonthAbbreviation(now)))"
+        case .billingCycle: return "SPEND (THIS CYCLE)"
+        case .lifetime: return "SPEND (ALL TIME)"
+        case .keyLimit: return "SPEND (KEY LIMIT)"
+        }
+    }
+
+    /// The same window as a spoken label: "Spend this month".
+    static func spendLabel(_ period: SpendPeriod) -> String {
+        switch period {
+        case .month: return "Spend this month"
+        case .billingCycle: return "Spend this billing cycle"
+        case .lifetime: return "Spend, all time"
+        case .keyLimit: return "Spend against the key limit"
         }
     }
 

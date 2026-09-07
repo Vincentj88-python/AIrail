@@ -330,6 +330,7 @@ struct OverlayView: View {
                 .accessibilityValue("\(UsageFormatting.credits(credits, currency: snapshot?.creditsCurrency)) remaining")
             }
             if let spend = snapshot?.spend {
+                let period = snapshot?.spendPeriod ?? .month
                 if snapshot?.credits != nil {
                     Divider()
                         .frame(height: 52)
@@ -337,23 +338,23 @@ struct OverlayView: View {
                         .padding(.trailing, 20)
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    sectionCaption("SPEND (\(UsageFormatting.currentMonthAbbreviation()))")
+                    sectionCaption(UsageFormatting.spendCaption(period))
                     HStack(spacing: 8) {
                         Image(systemName: "arrow.up.right")
                             .foregroundStyle(.secondary)
-                        Text(String(format: "$%.2f", spend))
+                        Text(UsageFormatting.dollars(spend))
                             .font(.system(size: 23, weight: .semibold))
                             .monospacedDigit()
                     }
                     if let cap = snapshot?.spendCap {
-                        Text(String(format: "of $%.2f limit", cap))
+                        Text("of \(UsageFormatting.dollars(cap)) limit")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Spend this month")
+                .accessibilityLabel(UsageFormatting.spendLabel(period))
                 .accessibilityValue(spendAccessibilityValue(snapshot: snapshot, spend: spend))
             }
         }
@@ -381,8 +382,8 @@ struct OverlayView: View {
 
     private func spendAccessibilityValue(snapshot: UsageSnapshot?, spend: Double) -> String {
         if let cap = snapshot?.spendCap {
-            return String(format: "$%.2f of $%.2f limit", spend, cap)
+            return "\(UsageFormatting.dollars(spend)) of \(UsageFormatting.dollars(cap)) limit"
         }
-        return String(format: "$%.2f", spend)
+        return UsageFormatting.dollars(spend)
     }
 }

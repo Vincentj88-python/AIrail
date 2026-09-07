@@ -34,6 +34,7 @@ final class MockUsageEngine {
         var credits: Double?
         var spend: Double?
         var spendCap: Double?
+        var spendPeriod: SpendPeriod = .month
         /// Model ids the demo "by model" list uses, most used first.
         var demoModels: [String] = ["demo-model-large", "demo-model-small"]
     }
@@ -84,6 +85,7 @@ final class MockUsageEngine {
             credits: profile.credits,
             spend: spendWalk?.step(),
             spendCap: profile.spendCap,
+            spendPeriod: profile.spendPeriod,
             plan: profile.plan,
             status: .demo,
             lastUpdated: Date(),

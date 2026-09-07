@@ -18,7 +18,7 @@ final class CursorProvider: UsageProviding {
 
     let demoProfile = MockUsageEngine.Profile(
         plan: "Pro", sessionStart: 62, weeklyLimit: 2000, weeklyStart: 62,
-        credits: 8760, spend: 18.40, spendCap: 60,
+        credits: 8760, spend: 18.40, spendCap: 60, spendPeriod: .billingCycle,
         demoModels: ["claude-opus-5", "gpt-5.5", "cursor-grok-4.6-high-fast"]
     )
 
@@ -286,6 +286,7 @@ enum CursorUsage {
             credits: nil,
             spend: nil,
             spendCap: nil,
+            spendPeriod: .billingCycle,
             plan: report.plan ?? credential.plan,
             status: .ok,
             lastUpdated: now,
