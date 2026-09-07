@@ -100,7 +100,31 @@ final class AIrailTests: XCTestCase {
         for provider in ProviderManager.makeProviders() {
             XCTAssertFalse(provider.connection.summary.isEmpty, "\(provider.id) needs a picker caption")
             XCTAssertFalse(provider.connection.explainer.isEmpty, "\(provider.id) needs an explainer")
+            let footprint = Footprint.items(for: provider.id)
+            if provider.connection.isSupported {
+                XCTAssertFalse(footprint.isEmpty, "\(provider.id) must say what it touches, for the Privacy pane")
+                XCTAssertTrue(footprint.contains { $0.host != nil }, "\(provider.id) must name the host it asks")
+            }
+            for host in footprint.compactMap(\.host) {
+                XCTAssertTrue(HTTPClient.allowedHosts.contains(host), "\(provider.id) names \(host), which the allowlist refuses")
+            }
         }
+        XCTAssertEqual(Set(Footprint.hosts.keys), HTTPClient.allowedHosts, "the Privacy pane describes exactly the allowlist")
+    }
+
+    /// The ledger is the allowlist with dates on it: one row per host, updated in place.
+    @MainActor
+    func testNetworkLedgerKeepsOneRowPerHost() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let ledger = NetworkLedger(since: now)
+        ledger.record(host: "api.anthropic.com", method: "GET", path: "/api/oauth/usage", status: 200, at: now)
+        ledger.record(host: "cursor.com", method: "POST", path: "/api/dashboard/get-filtered-usage-events", status: 200, at: now.addingTimeInterval(1))
+        ledger.record(host: "api.anthropic.com", method: "GET", path: "/api/oauth/usage", status: 429, at: now.addingTimeInterval(2))
+        XCTAssertEqual(ledger.entries.map(\.host), ["api.anthropic.com", "cursor.com"], "newest contact first")
+        XCTAssertEqual(ledger.entries.first?.count, 2)
+        XCTAssertEqual(ledger.entries.first?.status, 429)
+        XCTAssertEqual(ledger.entries.first?.lastContact, now.addingTimeInterval(2))
+        XCTAssertNotNil(SigningInfo.current(), "the test bundle's signature reads without a prompt")
     }
 
     // MARK: Demo data

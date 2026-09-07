@@ -83,6 +83,8 @@ enum HTTPClient {
         let status = http?.statusCode ?? 0
         // Host and status only — headers carry sign-ins, bodies carry usage.
         Log.network.info("\(url.host() ?? "?", privacy: .public) \(status, privacy: .public)")
+        let host = url.host() ?? "?", path = url.path()
+        Task { @MainActor in NetworkLedger.shared.record(host: host, method: method, path: path, status: status) }
         recorder?(url, data)
         // A redirect gets this far only because `RedirectGuard` refused to
         // follow it, so say where it pointed rather than "HTTP 302".

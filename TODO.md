@@ -74,6 +74,33 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Privacy & Security pane (2026-09-07)
+
+Block E. A fourth Settings tab, **Privacy** (`hand.raised`), where every line
+is measured, never asserted. *What AIrail reads*: per connected account, the
+files (Reveal in Finder), Keychain items (Open Keychain Access — it has no
+deep link, so the item name is printed) and the command it runs, from
+`Footprint.items(for:)` in `NetworkLedger.swift` (a table keyed by provider
+id rather than a field on `ConnectionMethod`, so no provider file changed;
+the test holds every supported provider to a non-empty footprint whose hosts
+are all on the allowlist, and the footprint's host table to equal the
+allowlist exactly). *Where it connects*: `NetworkLedger.shared`, one row per
+host fed from `HTTPClient.send` — last contact, status, count — plus the
+allowlisted hosts not yet contacted, with a footer naming the launch time
+and "every other host is refused in code, redirects included". *What it
+keeps*: the preferences plist size, AIrail's own Keychain items (attributes
+only, no prompt), the usage ledgers' count and size, "Cache, cookies, tokens
+on disk: None". *This build*: version + commit, signer, Hardened Runtime,
+App Sandbox and notarization from `SigningInfo.current()` (SecCode /
+SecCodeCopySigningInformation, the same facts `codesign -dvv` prints) — on
+the current cert it truthfully says "Not yet — no Apple Developer ID".
+*Remove All AIrail Data…* disconnects every account, deletes AIrail's
+Keychain items and ledgers, unregisters launch at login, wipes the
+preferences domain and quits, behind a confirmation. `KeychainStore.service`
+is internal now. Pane height 600, unverified on screen like the others.
+Under the sandbox (decision 1, later) the paths in "What it keeps" move.
+98 green (+1).
+
 ## About panel and diagnostics (2026-09-07)
 
 Block E. The Settings / update / Quit menu was copied three times (rail

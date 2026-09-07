@@ -17,6 +17,9 @@ struct SettingsView: View {
             AccountsPane(settings: settings, manager: manager)
                 .tabItem { Label("Accounts", systemImage: "person.crop.circle") }
                 .tag(RailUIState.SettingsTab.accounts)
+            PrivacyPane(settings: settings, manager: manager)
+                .tabItem { Label("Privacy", systemImage: "hand.raised") }
+                .tag(RailUIState.SettingsTab.privacy)
         }
         .frame(width: 640)
     }

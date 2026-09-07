@@ -5,7 +5,7 @@ import Combine
 @MainActor
 final class RailUIState: ObservableObject {
     enum SettingsTab: String, Hashable {
-        case general, rail, accounts
+        case general, rail, accounts, privacy
     }
 
     @Published var isExpanded = false
