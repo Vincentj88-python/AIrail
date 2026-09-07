@@ -27,7 +27,14 @@ enum LaunchOptions {
     /// True under `xcodebuild test`, where the app is only the test host and
     /// must not go reading sign-ins or endpoints on its own.
     static var isRunningTests: Bool {
-        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        isRunningTests(in: ProcessInfo.processInfo.environment)
+    }
+
+    /// Xcode 16 hands the host its session id and bundle path; the
+    /// configuration file path is what older Xcodes set, kept as a fallback.
+    static func isRunningTests(in environment: [String: String]) -> Bool {
+        ["XCTestSessionIdentifier", "XCTestBundlePath", "XCTestConfigurationFilePath"]
+            .contains { environment[$0] != nil }
     }
 
     /// `--flag` yields "", `--flag=x` yields "x", absent yields nil.

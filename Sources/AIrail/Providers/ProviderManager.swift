@@ -187,6 +187,7 @@ final class ProviderManager: ObservableObject {
         // A read still in flight must not put the numbers back when it lands.
         inflight[providerId]?.cancel()
         inflight[providerId] = nil
+        refreshingIds.remove(providerId) // the cancelled read leaves the mark to whoever holds it next
         (provider(for: providerId) as? any KeyedUsageProviding)?.forgetKey()
         settings.disconnect(providerId)
         snapshots[providerId] = nil
@@ -262,7 +263,9 @@ final class ProviderManager: ObservableObject {
     private func read(_ provider: any UsageProviding) async {
         let providerId = provider.id
         refreshingIds.insert(providerId)
-        defer { refreshingIds.remove(providerId) }
+        // A cancelled read was unmarked by `disconnect`; if the account was
+        // added back meanwhile, the mark belongs to its fresh read.
+        defer { if !Task.isCancelled { refreshingIds.remove(providerId) } }
         do {
             let snapshot = try await provider.fetchUsage()
             guard stillWanted(providerId) else { return }

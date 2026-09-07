@@ -1,6 +1,6 @@
 # AIrail — TODO / where we left off
 
-_Last updated: 2026-09-06. **v0.2.0 is feature-complete and all pushed** to the
+_Last updated: 2026-09-07. **v0.2.0 is feature-complete and all pushed** to the
 (now private) GitHub repo; running from `/Applications` on this Mac. Below is
 where we left off; the dated sections further down are the running log of how
 each piece was built and why._
@@ -87,13 +87,17 @@ Things established that reverse or extend earlier notes:
   for AppKit-backed views. The HUD has two: the header's `Menu`
   (`OverlayView.header`, `.menuStyle(.button)`) and the chart's segmented
   `Picker` (`UsageChartSection`). Its `.ultraThinMaterial` (`OverlayView`,
-  `GlassPanel`, `LogoMark`'s default disc) has nothing behind it offscreen,
-  so the glass comes out flat grey. So the sketch "extract a ProviderCardView
+  `GlassPanel`, `LogoMark`'s default disc) and the chart callout's
+  `.regularMaterial` (`ChartCallout` in `UsageChartSection`) have nothing
+  behind them offscreen, so the glass comes out flat grey. So the sketch
+  "extract a ProviderCardView
   from `OverlayView.content` and render it" is wrong in practice. The card
   must be its own value-typed, material-free, control-free view — a solid
   paint, `LogoMark(onDark: true)` (already a solid disc), shapes and text —
-  rendered with `ImageRenderer(scale: 2, isOpaque: true)` to an `NSImage` and
-  offered through SwiftUI `ShareLink(item:preview:)` (macOS 13+), which
+  rendered with `ImageRenderer(content:)`, its `.scale = 2` and
+  `.isOpaque = true` set first (both `@MainActor` properties; there is no
+  `(scale:isOpaque:)` initializer), read back as `.nsImage`, and offered
+  through SwiftUI `ShareLink(item:preview:)` (macOS 13+), which
   wraps `NSSharingServicePicker` for free. Never an extraction of
   `OverlayView`. Nothing of the kind exists in the tree today (checked).
 - **Share-sheet notes for then:** the app is `.accessory` and the HUD a
@@ -120,8 +124,9 @@ Things established that reverse or extend earlier notes:
 - **Why redaction can't do it:** SwiftUI redaction affects `Text` and `Image`
   only. The session ring (`OverlayView.sessionRing`, `Circle().trim`), the
   rail marks (`LogoMark`, the same trim), the BY MODEL / BY PROJECT share bars
-  (`UsageChartSection.column`, `Capsule`) and the chart bars
-  (`RoundedRectangle`) are Shapes and keep drawing the real percentages, so a
+  (`UsageBreakdown.column` in `Views/UsageChartSection.swift`, `Capsule`)
+  and the chart bars (`HourlyBars`, `RoundedRectangle`) are Shapes and keep
+  drawing the real percentages, so a
   "redacted" card is grey text blocks over live rings: it looks broken, not
   private. And macOS has no system trigger for an app's own windows (the
   system applies `.privacy` to WidgetKit content only), so it would have
@@ -172,6 +177,17 @@ Things established that reverse or extend earlier notes:
   `.currency(code:).locale(locale)` — "$12.50" here, "US$12.50" on an en_GB
   Mac, "CN¥88.00" for a DeepSeek yuan balance. Tests pin en_US and en_GB.
   Dates and durations wait for block B's locale item.
+- **Polish (2026-09-07):** a limited key's ring and footer now count the
+  same thing whatever clock the limit resets on — `(limit − limit_remaining)`
+  of `limit` under `SPEND (KEY LIMIT)`; the monthly exception (a `"monthly"`
+  `limit_reset` put `usage_monthly` under `SPEND (SEP)` beside a ring that
+  counted the limit) is gone, and only an unlimited key shows
+  `usage_monthly` as `.month`. `usage` is optional now: an answer with
+  neither figure leaves `spend` nil and the footer empty instead of a
+  fabricated $0.00 (principle 4; tested). `spendCaption(.month)` names the
+  UTC month — the formatter is pinned to UTC, since every `.month` producer
+  (OpenRouter's `usage_monthly`, both org cost reports) measures the UTC
+  month; tested at the 31 Aug / 1 Sep boundary so it holds in any zone.
 - **By hand, Vincent:** nothing required. One live run with
   `TEST_RUNNER_AIRAIL_OPENROUTER_KEY` would confirm `usage_monthly` and
   `limit_reset` on a real key (the docs list both); a nicety, not a gate.
@@ -195,9 +211,26 @@ Things established that reverse or extend earlier notes:
   `RailUIState.availableUpdate`, so the three menus read **Update to
   0.2.1…** until you have it. README's Releasing section says all this.
 - **Permission:** the same question the usage alerts ask
-  (`UsageNotifier.systemAuthorization`, now internal): never asked → the
-  system prompt, once; refused → nothing, never an alert as the fallback.
-  The menu relabel needs none of it.
+  (`UsageNotifier.systemAuthorization`, now internal): authorized → the
+  notification; never asked or refused → nothing, never an alert as the
+  fallback and never the system prompt from a timer. The menu relabel needs
+  none of it.
+- **Polish (2026-09-07):** `announce` posts only when macOS already says
+  `.authorized` (`.provisional` counts too — never requested, honoured if it
+  ever is); on `.notDetermined` the relabelled menu item carries the news
+  and no prompt is raised from the background path. `destination(for:in:)`
+  answers nil for `UNNotificationDismissActionIdentifier`, so swiping the
+  banner away opens nothing (one assertion added). `startBackgroundChecks`
+  first takes down a delivered notification whose version is not newer than
+  the running build (`removeDeliveredNotifications(withIdentifiers:
+  ["update"])`) and clears `notifiedUpdateVersion`, so the banner for the
+  release you just installed doesn't linger and a later release gets its
+  own. The "Update to x.y.z…" item shows the release the last check found
+  (`UpdateChecker.show(_:)` — the same alert as the menu path, no second
+  fetch) and falls back to `checkForUpdates()` when `ui.availableUpdate` is
+  nil; the three menus (RailView, NotchView, OverlayView) carry that
+  if/else themselves rather than a wrapper taking an optional, so each
+  button reads as what it does.
 - **By hand, Vincent:** nothing now. The private repo answers 404, so the
   quiet path stays silent until go-public; give the first real one a look
   (the banner, the Download button, the relabel).
@@ -232,6 +265,28 @@ Things established that reverse or extend earlier notes:
   and opens that HUD (`OverlayWindowController.show(providerId:)`, never a
   toggle). The burn-rate samples restart when the reset time changes; a
   slope across a reset meant nothing. `notificationsEnabled` defaults off.
+- **Polish (2026-09-07):** `consider` re-checks `Task.isCancelled` after
+  the `await` on permission, so an account removed while macOS was being
+  asked neither delivers nor remembers a threshold. `systemAuthorization`
+  is true only for `.authorized` (and `.provisional`, never requested but
+  honoured); `.notDetermined` is false rather than a prompt — a background
+  refresh must never raise the system dialog, and the General toggle is the
+  one caller of `requestAuthorization` (checked: `requestPermission` alone,
+  from the toggle's `onChange`). The remembered thresholds are keyed per
+  window now — `announcedThresholds` is `["<providerId>.<resetsAt unix
+  seconds>" or "<providerId>.none": threshold]` instead of one slot per
+  provider — so a ring that swaps between its session and weekly windows
+  (Codex Plus with and without its 5-hour window) keeps a mark for each
+  rather than re-announcing 75 on every swap; each write drops marks whose
+  window is past (the `.none` mark has no clock and goes with `forget` or
+  the 25-point fall). The earlier `[String: [String: Int]]` shape fails the
+  cast and reads as empty; only this branch's builds ever wrote it. New
+  test: alternating windows, the prune, `forget`.
+- **Watch item, not changed:** `applicationWillTerminate` →
+  `ProviderManager.stop()` → `removePendingNotificationRequests` is an
+  asynchronous XPC call with nothing to await, so the process can exit
+  before it lands and a reset alert could then fire for an app that isn't
+  running. Not seen; watch for a "usage reset" banner arriving after Quit.
 - **Left out:** the time-sensitive interruption level (needs the Developer
   ID's entitlement; would be silently downgraded now), notification actions.
 - **By hand, Vincent:** the toggle is off on this build even if it was on
@@ -360,6 +415,17 @@ Things established that reverse or extend earlier notes:
   dropped while the permission callback is pending (notifications item);
   `KeychainReader`'s `Thread.sleep` stays — `SecItemCopyMatching` blocks that
   thread for the whole prompt anyway.
+- **Polish (2026-09-07):** `refreshingIds` bookkeeping — `disconnect` takes
+  the id out right after cancelling the read (removed means not refreshing,
+  not "spinning until the cancelled read lands"), and `read`'s `defer`
+  removes it only when its task was not cancelled, so an account added back
+  while the stale read is still out keeps its fresh read's mark (new test;
+  `FakeProvider.release(count:)` lets one held read land before another).
+  `LaunchOptions.isRunningTests` also recognises the keys Xcode 16 sets on
+  the host, `XCTestSessionIdentifier` and `XCTestBundlePath`, with
+  `XCTestConfigurationFilePath` kept as the older fallback; the pure
+  `isRunningTests(in:)` is tested with each key, and the same test asserts
+  the live value is true under the run itself.
 
 ## Remove: v0.1 snapshot fields (2026-09-06)
 

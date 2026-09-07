@@ -572,10 +572,10 @@ final class AIrailTests: XCTestCase {
 
         let monthlyKey = #"{"data":{"label":"m","usage":120,"usage_monthly":4.2,"limit":50,"limit_remaining":45.8,"limit_reset":"monthly"}}"#
         let monthly = try OpenRouterUsage.snapshot(keyData: Data(monthlyKey.utf8), creditsData: nil, providerId: "openrouter", displayName: "OpenRouter")
-        XCTAssertEqual(monthly.weeklyPercent!, 8.4, accuracy: 0.001)
-        XCTAssertEqual(monthly.spend, 4.2, "a monthly budget pairs with this month's spend")
+        XCTAssertEqual(try XCTUnwrap(monthly.weeklyPercent), 8.4, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(monthly.spend), 4.2, accuracy: 0.001, "ring and footer count the same thing, whatever clock the limit resets on")
         XCTAssertEqual(monthly.spendCap, 50)
-        XCTAssertEqual(monthly.spendPeriod, .month)
+        XCTAssertEqual(monthly.spendPeriod, .keyLimit)
 
         let openKey = #"{"data":{"label":"o","usage":120,"usage_monthly":4.2,"limit":null,"limit_remaining":null,"limit_reset":null,"is_free_tier":false}}"#
         let open = try OpenRouterUsage.snapshot(keyData: Data(openKey.utf8), creditsData: Data(credits.utf8), providerId: "openrouter", displayName: "OpenRouter")
@@ -593,6 +593,13 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(noLimit.spend, 3, "no monthly figure: the lifetime total, labelled as such")
         XCTAssertEqual(noLimit.spendPeriod, .lifetime)
         XCTAssertNil(noLimit.spendCap)
+
+        // Neither figure in the answer: the footer stays empty rather than
+        // printing a $0.00 nobody reported.
+        let bareKey = #"{"data":{"label":"b","limit":null,"is_free_tier":false}}"#
+        let bare = try OpenRouterUsage.snapshot(keyData: Data(bareKey.utf8), creditsData: Data(credits.utf8), providerId: "openrouter", displayName: "OpenRouter")
+        XCTAssertNil(bare.spend, "no usage figure at all is not $0.00")
+        XCTAssertEqual(try XCTUnwrap(bare.weeklyPercent), 40.25, accuracy: 0.001, "the credits ring stands on its own")
         XCTAssertThrowsError(try OpenRouterUsage.snapshot(keyData: Data("{}".utf8), creditsData: nil, providerId: "openrouter", displayName: "OpenRouter"))
     }
 
@@ -606,7 +613,7 @@ final class AIrailTests: XCTestCase {
         XCTAssertThrowsError(try DeepSeekUsage.snapshot(data: Data(#"{"is_available":false,"balance_infos":[]}"#.utf8), providerId: "deepseek", displayName: "DeepSeek"))
     }
 
-    func testMoneyFollowsTheLocaleAndSpendCaptionsNameTheWindow() {
+    func testMoneyFollowsTheLocaleAndSpendCaptionsNameTheWindow() throws {
         let us = Locale(identifier: "en_US")
         let gb = Locale(identifier: "en_GB")
         XCTAssertEqual(UsageFormatting.dollars(12.5, locale: us), "$12.50")
@@ -624,6 +631,18 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(UsageFormatting.spendCaption(.keyLimit), "SPEND (KEY LIMIT)")
         XCTAssertEqual(UsageFormatting.spendLabel(.lifetime), "Spend, all time")
         XCTAssertEqual(UsageSnapshot.empty(providerId: "x", displayName: "X", status: .ok).spendPeriod, .month, "month-to-date is the default every org cost report uses")
+
+        // Every `.month` producer measures the UTC month, so the caption names
+        // that one: 23:30 UTC on 31 August is still August whatever zone the
+        // Mac is in, and 00:30 UTC on 1 September is September.
+        let iso = ISO8601DateFormatter()
+        let lateAugust = try XCTUnwrap(iso.date(from: "2026-08-31T23:30:00Z"))
+        let earlySeptember = try XCTUnwrap(iso.date(from: "2026-09-01T00:30:00Z"))
+        let august = try XCTUnwrap(iso.date(from: "2026-08-15T12:00:00Z"))
+        let september = try XCTUnwrap(iso.date(from: "2026-09-15T12:00:00Z"))
+        XCTAssertEqual(UsageFormatting.spendCaption(.month, now: lateAugust), UsageFormatting.spendCaption(.month, now: august))
+        XCTAssertEqual(UsageFormatting.spendCaption(.month, now: earlySeptember), UsageFormatting.spendCaption(.month, now: september))
+        XCTAssertNotEqual(UsageFormatting.spendCaption(.month, now: lateAugust), UsageFormatting.spendCaption(.month, now: earlySeptember))
     }
 
     func testAnthropicAPISnapshot() throws {
@@ -883,6 +902,7 @@ final class AIrailTests: XCTestCase {
         let userInfo = request.content.userInfo
         XCTAssertEqual(UpdateChecker.destination(for: UpdateChecker.downloadActionIdentifier, in: userInfo), dmg)
         XCTAssertEqual(UpdateChecker.destination(for: UNNotificationDefaultActionIdentifier, in: userInfo), page)
+        XCTAssertNil(UpdateChecker.destination(for: UNNotificationDismissActionIdentifier, in: userInfo), "dismissing it opens nothing")
 
         // Only a DMG served from github.com is ever opened; anything else is the page.
         var elsewhere = userInfo
@@ -908,6 +928,14 @@ final class AIrailTests: XCTestCase {
     }
 
     // MARK: Network path
+
+    func testTestHostIsRecognisedByAnyXCTestKey() {
+        XCTAssertTrue(LaunchOptions.isRunningTests, "this run: the host app must not start its readers or the update check")
+        for key in ["XCTestSessionIdentifier", "XCTestBundlePath", "XCTestConfigurationFilePath"] {
+            XCTAssertTrue(LaunchOptions.isRunningTests(in: [key: "x"]), key)
+        }
+        XCTAssertFalse(LaunchOptions.isRunningTests(in: ["PATH": "/usr/bin"]))
+    }
 
     func testNetworkSessionKeepsNothingOnDisk() {
         let configuration = HTTPClient.configuration

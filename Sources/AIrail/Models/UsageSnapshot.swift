@@ -114,9 +114,13 @@ enum UsageFormatting {
         return formatter
     }()
 
+    /// UTC-pinned: every `.month` spend is measured over the UTC month
+    /// (OpenRouter's `usage_monthly`, the two org cost reports), so the
+    /// caption must name that month, not the local one.
     private static let monthFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM"
+        formatter.timeZone = TimeZone(identifier: "UTC")
         return formatter
     }()
 
@@ -128,6 +132,7 @@ enum UsageFormatting {
         return "resets " + resetDayFormatter.string(from: date)
     }
 
+    /// The UTC month `date` falls in, as "SEP".
     static func currentMonthAbbreviation(_ date: Date = Date()) -> String {
         monthFormatter.string(from: date).uppercased()
     }

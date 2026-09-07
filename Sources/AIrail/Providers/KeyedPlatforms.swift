@@ -113,13 +113,12 @@ enum OpenRouterUsage {
         guard let key = try JSONObject(data: keyData)["data"] else {
             throw ConnectionError.unreadable("no key data in response")
         }
-        let usage = key.double("usage") ?? 0
+        let usage = key.double("usage")
         let monthly = key.double("usage_monthly")
         let limit = key.double("limit").flatMap { $0 > 0 ? $0 : nil }
-        let limitReset = key.string("limit_reset")
         // What OpenRouter itself counts against the key's limit. `usage` is
         // all time and keeps growing across a daily, weekly or monthly reset.
-        let againstLimit = limit.map { limit in
+        let againstLimit = limit.flatMap { limit in
             key.double("limit_remaining").map { max(0, limit - $0) } ?? usage
         }
         let credits = creditsData.flatMap { try? JSONObject(data: $0)["data"] }
@@ -138,18 +137,19 @@ enum OpenRouterUsage {
         snapshot.weeklyPercent = percent
         snapshot.periodLabel = period
         // The footer pairs a figure only with a cap measured over the same
-        // window: this UTC month for an open key or a monthly budget, the
-        // key's own budget when it resets on some other clock or never, and
-        // everything ever spent on an answer without `usage_monthly`.
-        if let monthly, limit == nil || limitReset == "monthly" {
-            snapshot.spend = monthly
-            snapshot.spendCap = limit
-            snapshot.spendPeriod = .month
-        } else if let limit, let againstLimit {
+        // window, and with a limited key that is the ring's own counter,
+        // whatever clock the limit resets on. An open key shows this UTC
+        // month, or everything ever spent when the answer has no monthly
+        // figure; with neither the footer stays empty rather than printing
+        // a made-up $0.00.
+        if let limit, let againstLimit {
             snapshot.spend = againstLimit
             snapshot.spendCap = limit
             snapshot.spendPeriod = .keyLimit
-        } else {
+        } else if let monthly {
+            snapshot.spend = monthly
+            snapshot.spendPeriod = .month
+        } else if let usage {
             snapshot.spend = usage
             snapshot.spendPeriod = .lifetime
         }

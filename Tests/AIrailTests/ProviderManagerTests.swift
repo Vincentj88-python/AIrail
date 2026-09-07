@@ -44,12 +44,39 @@ final class ProviderManagerTests: XCTestCase {
         await eventually("the read to start") { claude.reads == 1 }
         manager.disconnect("claude")
         XCTAssertFalse(settings.isConnected("claude"))
+        XCTAssertTrue(manager.refreshingIds.isEmpty, "removed means not refreshing, before the cancelled read lands")
 
         claude.release()
         await refresh.value
         XCTAssertNil(manager.snapshots["claude"], "a read that lands after its account is removed writes nothing")
         XCTAssertNil(manager.lastErrors["claude"], "nor does the 'cancelled' error it throws")
         XCTAssertTrue(manager.refreshingIds.isEmpty)
+    }
+
+    @MainActor
+    func testAnAccountAddedBackKeepsItsOwnRefreshingMark() async throws {
+        let claude = FakeProvider(id: "claude", results: [.success(Self.snapshot("claude", percent: 42))])
+        let codex = FakeProvider(id: "codex", results: [.success(Self.snapshot("codex", percent: 7))])
+        let (manager, settings) = try makeManager([claude, codex])
+        settings.connect("claude")
+        settings.connect("codex")
+        claude.holdsReads = true
+
+        let stale = Task { await manager.refresh("claude") }
+        await eventually("the read to start") { claude.reads == 1 }
+        manager.disconnect("claude")
+        settings.connect("claude") // added back while the cancelled read is still out
+        let fresh = Task { await manager.refresh("claude") }
+        await eventually("the fresh read to start") { claude.reads == 2 }
+        XCTAssertTrue(manager.refreshingIds.contains("claude"))
+
+        claude.release(count: 1) // the stale read lands, as "cancelled"
+        await stale.value
+        XCTAssertTrue(manager.refreshingIds.contains("claude"), "the stale read leaves the fresh read's mark alone")
+        claude.release()
+        await fresh.value
+        XCTAssertEqual(manager.snapshots["claude"]?.sessionPercent, 42, "the fresh read lands")
+        XCTAssertTrue(manager.refreshingIds.isEmpty, "and takes its own mark down")
     }
 
     // MARK: Backoff
@@ -274,6 +301,56 @@ final class ProviderManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testNotifierKeepsAMarkPerWindowWhenTheRingSwapsSources() async throws {
+        let clock = TestClock()
+        let inbox = NotificationInbox()
+        let defaults = try makeDefaults()
+        let notifier = try makeNotifier(inbox, clock: clock, defaults: defaults)
+        let session = clock.now.addingTimeInterval(3600)
+        let week = clock.now.addingTimeInterval(5 * 24 * 3600)
+        // Codex: the 5-hour window when the plan reports one, else the weekly
+        // meter — the ring, and so the alert, swaps sources between reads.
+        func consider(session percent: Double) async {
+            await notifier.consider(Self.snapshot("codex", percent: percent, resetsAt: session), enabled: true)
+        }
+        func consider(weekly percent: Double) async {
+            var snapshot = UsageSnapshot.empty(providerId: "codex", displayName: "Codex", status: .ok)
+            snapshot.weeklyPercent = percent
+            snapshot.weeklyResetsAt = week
+            await notifier.consider(snapshot, enabled: true)
+        }
+        func marks() -> [String: Int] {
+            defaults.dictionary(forKey: "announcedThresholds") as? [String: Int] ?? [:]
+        }
+
+        await consider(session: 80)
+        XCTAssertEqual(inbox.bodies.count, 1)
+        await consider(weekly: 80)
+        XCTAssertEqual(inbox.bodies.count, 2, "the weekly window is another window, announced on its own")
+        XCTAssertTrue(inbox.bodies[1].hasPrefix("75% of your weekly used."), inbox.bodies[1])
+        await consider(session: 82)
+        XCTAssertEqual(inbox.bodies.count, 2, "back on the session window, 75 was already said there")
+        await consider(weekly: 91)
+        XCTAssertEqual(inbox.bodies.count, 3)
+        await consider(session: 91)
+        XCTAssertEqual(inbox.bodies.count, 4, "each window climbs its own thresholds")
+        let sessionMark = "codex.\(Int(session.timeIntervalSince1970))"
+        let weekMark = "codex.\(Int(week.timeIntervalSince1970))"
+        XCTAssertEqual(marks(), [sessionMark: 90, weekMark: 90])
+
+        // The session window passes: its mark goes with the next write, the
+        // weekly one (still ahead) stays.
+        clock.advance(by: 3601)
+        let next = clock.now.addingTimeInterval(3600)
+        await notifier.consider(Self.snapshot("codex", percent: 76, resetsAt: next), enabled: true)
+        XCTAssertEqual(inbox.bodies.count, 5, "a fresh session window announces 75 again")
+        XCTAssertEqual(marks(), ["codex.\(Int(next.timeIntervalSince1970))": 75, weekMark: 90])
+
+        notifier.forget("codex")
+        XCTAssertTrue(marks().isEmpty, "a removed account leaves no mark in any window")
+    }
+
+    @MainActor
     func testNotifierSchedulesTheResetAtTheReportedTimeAndTakesItBack() async throws {
         let clock = TestClock()
         let inbox = NotificationInbox()
@@ -470,10 +547,10 @@ final class FakeProvider: UsageProviding {
         return try results[min(turn, results.count - 1)].get()
     }
 
-    /// Lets every held read finish.
-    func release() {
-        let waiting = held
-        held = []
+    /// Lets every held read finish — or only the first `count` of them.
+    func release(count: Int = .max) {
+        let waiting = Array(held.prefix(count))
+        held.removeFirst(waiting.count)
         for continuation in waiting { continuation.resume() }
     }
 }

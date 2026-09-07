@@ -45,12 +45,19 @@ enum UpdateChecker {
         Task { await check(userInitiated: true) }
     }
 
+    /// The same item once it reads "Update to x.y.z…": the release the last
+    /// check found, shown straight away rather than fetched again.
+    static func show(_ release: Release) {
+        Task { await presentUpdate(release, userInitiated: true) }
+    }
+
     /// The quiet checks: one now if a day has passed since the last, then an
     /// hourly tick (with tolerance, so the system can coalesce it) that does
     /// the same — an app left running for weeks still looks once a day. Only
     /// speaks up when there's actually a newer version.
     static func startBackgroundChecks(reporting report: @escaping @MainActor (Release?) -> Void) {
         self.report = report
+        clearStaleAnnouncement()
         checkInBackgroundIfDue()
         // Same shape as ProviderManager's refresh timer: main run loop, .common
         // mode, silent while the Mac sleeps.
@@ -60,6 +67,18 @@ enum UpdateChecker {
         timer.tolerance = tickInterval / 6
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
+    }
+
+    /// A notification still sitting in Notification Center for the release
+    /// now running (or one older) is taken down, and its version forgotten,
+    /// so the next release gets its own.
+    private static func clearStaleAnnouncement() {
+        let defaults = UserDefaults.standard
+        guard let notified = defaults.string(forKey: notifiedVersionKey),
+              !isNewer(notified, than: currentVersion)
+        else { return }
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [categoryIdentifier])
+        defaults.removeObject(forKey: notifiedVersionKey)
     }
 
     private static func checkInBackgroundIfDue() {
@@ -173,10 +192,12 @@ enum UpdateChecker {
         }
     }
 
-    /// One notification per release version, and only if macOS lets AIrail
-    /// post (asked now if it never was; nothing if refused — an alert is not
-    /// the fallback). The version is remembered only once posted, so a prompt
-    /// still up at this check doesn't cost the release its one notification.
+    /// One notification per release version, and only if macOS already lets
+    /// AIrail post: a background check never raises the permission prompt
+    /// (the Settings toggle does that), and never asked or refused means
+    /// nothing — the relabelled menu item carries the news. The version is
+    /// remembered only once posted, so a release that couldn't be announced
+    /// this check still gets its one notification later.
     private static func announce(_ release: Release) async {
         let defaults = UserDefaults.standard
         guard release.version != defaults.string(forKey: notifiedVersionKey) else { return }
@@ -228,8 +249,10 @@ enum UpdateChecker {
 
     /// Where a response to that notification goes: the Download button to
     /// the DMG — only ever one served from github.com — and anything else,
-    /// a plain click included, to the release page and its notes.
+    /// a plain click included, to the release page and its notes. Dismissing
+    /// it goes nowhere.
     nonisolated static func destination(for actionIdentifier: String, in userInfo: [AnyHashable: Any]) -> URL? {
+        guard actionIdentifier != UNNotificationDismissActionIdentifier else { return nil }
         let page = (userInfo["page"] as? String).flatMap(URL.init)
         guard actionIdentifier == downloadActionIdentifier,
               let dmg = (userInfo["dmg"] as? String).flatMap(URL.init),

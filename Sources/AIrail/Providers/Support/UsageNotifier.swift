@@ -25,11 +25,13 @@ final class UsageNotifier {
     private let authorization: Authorization
     private let deliver: Deliver
     private let withdraw: Withdraw
-    /// Per provider, the highest threshold announced and the window it was
-    /// announced in (`"window"`: the reset time in unix seconds, absent when
-    /// the provider reports none). Kept in defaults so a relaunch at 80%
-    /// doesn't say 75 again.
-    private var announced: [String: [String: Int]] {
+    /// Per provider and window, the highest threshold announced, under
+    /// "<providerId>.<reset time in unix seconds>" — "<providerId>.none" when
+    /// the provider reports no reset. Kept in defaults so a relaunch at 80%
+    /// doesn't say 75 again, one mark per window so a ring that swaps between
+    /// its session and weekly windows keeps both; marks for windows already
+    /// past are dropped whenever one is written.
+    private var announced: [String: Int] {
         didSet { defaults.set(announced, forKey: Self.announcedKey) }
     }
     /// The window (unix seconds) each provider's reset alert is scheduled
@@ -51,7 +53,7 @@ final class UsageNotifier {
         self.authorization = authorization
         self.deliver = deliver
         self.withdraw = withdraw
-        announced = defaults.dictionary(forKey: Self.announcedKey) as? [String: [String: Int]] ?? [:]
+        announced = defaults.dictionary(forKey: Self.announcedKey) as? [String: Int] ?? [:]
     }
 
     /// The real thing: Notification Center for permission, delivery and withdrawal.
@@ -69,11 +71,12 @@ final class UsageNotifier {
         guard enabled, snapshot.status == .ok, let percent = snapshot.ringPercent else { return }
         let id = snapshot.providerId
         let window = snapshot.ringResetsAt.map { Int($0.timeIntervalSince1970) }
-        var announcedBefore = announcedThreshold(id, window: window)
+        let mark = Self.mark(id, window: window)
+        var announcedBefore = announced[mark] ?? 0
         if Int(percent) < announcedBefore - 25 {
             // Well under what was announced, with no new reset time: the
             // meter was reset without saying so (a raised key limit). Start over.
-            announced[id] = nil
+            remember(nil, at: mark)
             announcedBefore = 0
         }
         guard let crossed = thresholds.first(where: { Int(percent) >= $0 }) else { return }
@@ -85,8 +88,11 @@ final class UsageNotifier {
         // to show (at launch, or with the prompt still up) comes through on
         // the next refresh instead of being lost.
         guard await authorization() else { return }
+        // The account was removed while macOS was asked: nothing to say, and
+        // nothing to remember for a read that no longer counts.
+        guard !Task.isCancelled else { return }
         if announces {
-            announced[id] = window.map { ["window": $0, "threshold": crossed] } ?? ["threshold": crossed]
+            remember(crossed, at: mark)
             var body = "\(crossed)% of your \(snapshot.ringWindowLabel) used."
             if let resets = snapshot.ringResetsAt {
                 body += " " + UsageFormatting.resetString(resets, now: now()).capitalizedFirst
@@ -100,7 +106,7 @@ final class UsageNotifier {
 
     /// An account removed: nothing remembered, nothing left pending.
     func forget(_ providerId: String) {
-        announced[providerId] = nil
+        announced = announced.filter { !$0.key.hasPrefix(providerId + ".") }
         scheduledResets[providerId] = nil
         withdraw(["\(providerId).reset"])
     }
@@ -112,9 +118,21 @@ final class UsageNotifier {
         withdraw(providerIds.map { "\($0).reset" })
     }
 
-    private func announcedThreshold(_ providerId: String, window: Int?) -> Int {
-        guard let mark = announced[providerId], mark["window"] == window else { return 0 }
-        return mark["threshold"] ?? 0
+    private static func mark(_ providerId: String, window: Int?) -> String {
+        "\(providerId).\(window.map(String.init) ?? "none")"
+    }
+
+    /// Writes one mark and drops every mark whose window has passed. A mark
+    /// with no window has no clock to expire on; `forget` or the meter
+    /// falling well under it is what clears that one.
+    private func remember(_ threshold: Int?, at mark: String) {
+        let cutoff = Int(now().timeIntervalSince1970)
+        var kept = announced.filter { key, _ in
+            guard let window = key.split(separator: ".").last.flatMap({ Int($0) }) else { return true }
+            return window > cutoff
+        }
+        kept[mark] = threshold
+        announced = kept
     }
 
     /// One alert at the time the provider itself says the window resets,
@@ -168,13 +186,13 @@ final class UsageNotifier {
         return await systemStatus()
     }
 
-    /// Authorized means deliver. Never asked (the toggle was on before the
-    /// prompt was answered) means ask now rather than drop the alert. The
-    /// update notification (`UpdateChecker`) asks the same question.
+    /// Authorized (provisionally counts) means deliver; anything else, never
+    /// asked included, means nothing: a background refresh must never raise
+    /// the system prompt — the Settings toggle is the one place that asks.
+    /// The update notification (`UpdateChecker`) reads the same answer.
     static func systemAuthorization() async -> Bool {
         switch await systemStatus() {
-        case .authorized: return true
-        case .notDetermined: return await requestPermission() == .authorized
+        case .authorized, .provisional: return true
         default: return false
         }
     }

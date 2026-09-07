@@ -69,7 +69,11 @@ struct RailView: View {
                 openSettings()
             }
             Button(UpdateChecker.menuTitle(for: ui.availableUpdate)) {
-                UpdateChecker.checkForUpdates()
+                if let release = ui.availableUpdate {
+                    UpdateChecker.show(release)
+                } else {
+                    UpdateChecker.checkForUpdates()
+                }
             }
             Divider()
             Button("Quit AIrail") {

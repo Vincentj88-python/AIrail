@@ -362,7 +362,7 @@ Prerequisites: the Developer ID, the usage ledger, the menu consolidation, the s
 - [ ] **Presentation-aware redaction while mirrored** · hours · wow 3/5 · `presentation-aware-demo-face`
   When a display is mirrored to a projector the rail redacts account and project names by itself and restores them when mirroring ends.
   - How: ScreenSelection.anyDisplayMirrored (~10 lines: CGGetOnlineDisplayList + CGDisplayIsInMirrorSet) and a @Published isMirroring on RailUIState set inside AppDelegate.applyPosition(), which already runs at launch, on didChangeScreenParameters and after the resettle. A single derived Bool ui.isRedacted applied as .redacted(reason: .privacy) at the roots of OverlayView, ExpandedRailContent and the island caption, with privacySensitive() on snapshot.account, the BY PROJECT column, the plan pill and the value line; rings and percentages stay real. One RailPane Toggle, default on, worded like Apple's 'Allow notifications when mirroring' setting. Camera-on trigger cut. Verify once with a real AirPlay mirror.
-  - Why here: Orphaned: its only prerequisite, the demo face, is on the cut list (redaction leaves Shapes drawing live rings). It lives only if open question 2 reverses that cut; the mirror-detection sliver itself is sound.
+  - Why here: Decision 2 (pick 3) makes this the vehicle for the names-only Bool; rings stay real, see TODO.md. The mirror-detection sliver itself is sound.
 
 
 ## Cut, with the skeptic's blocker
