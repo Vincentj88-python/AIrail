@@ -70,6 +70,18 @@ grep -qE '^CodeDirectory .*flags=0x10000\(runtime\)' <<< "$DETAILS" \
 grep -q '^Timestamp=' <<< "$DETAILS" \
   || { echo "✗ the signature carries no secure timestamp"; exit 1; }
 
+# With a Developer ID and a stored notarytool profile, Apple checks the app
+# before it is packaged, and the ticket is stapled so it opens offline:
+#   xcrun notarytool store-credentials AIrail --apple-id … --team-id … --password …
+#   AIRAIL_SIGN_IDENTITY="Developer ID Application: …" AIRAIL_NOTARY_PROFILE=AIrail ./scripts/release.sh
+if [[ "$SIGN_IDENTITY" == Developer\ ID* && -n "${AIRAIL_NOTARY_PROFILE:-}" ]]; then
+  echo "▸ Notarizing the app with profile $AIRAIL_NOTARY_PROFILE"
+  ZIP="$BUILD_DIR/$APP_NAME.zip"
+  ditto -c -k --keepParent "$APP" "$ZIP"
+  xcrun notarytool submit "$ZIP" --keychain-profile "$AIRAIL_NOTARY_PROFILE" --wait
+  xcrun stapler staple "$APP"
+fi
+
 echo "▸ Staging DMG contents"
 STAGE="$BUILD_DIR/dmg"
 mkdir -p "$STAGE"
@@ -86,6 +98,50 @@ hdiutil create \
   -format ULFO \
   -ov "$DMG" >/dev/null
 
+if [[ "$SIGN_IDENTITY" == Developer\ ID* && -n "${AIRAIL_NOTARY_PROFILE:-}" ]]; then
+  echo "▸ Notarizing the DMG"
+  xcrun notarytool submit "$DMG" --keychain-profile "$AIRAIL_NOTARY_PROFILE" --wait
+  xcrun stapler staple "$DMG"
+fi
+
+SHA="$(shasum -a 256 "$DMG" | cut -d' ' -f1)"
+
+# A Homebrew tap checkout in AIRAIL_TAP gets its cask rewritten for this
+# version; commit and push it after the GitHub release exists.
+if [ -n "${AIRAIL_TAP:-}" ]; then
+  mkdir -p "$AIRAIL_TAP/Casks"
+  cat > "$AIRAIL_TAP/Casks/airail.rb" <<CASK
+cask "airail" do
+  version "$VERSION"
+  sha256 "$SHA"
+
+  url "https://github.com/Vincentj88-python/AIrail/releases/download/v#{version}/AIrail-#{version}.dmg"
+  name "AIrail"
+  desc "Screen-edge rail that tracks usage of the AI coding tools you run"
+  homepage "https://github.com/Vincentj88-python/AIrail"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
+  depends_on macos: ">= :sonoma"
+
+  app "AIrail.app"
+
+  uninstall quit: "com.codeandvin.airail"
+
+  zap trash: [
+    "~/Library/Application Support/AIrail",
+    "~/Library/Preferences/com.codeandvin.airail.plist",
+    "~/Library/Logs/DiagnosticReports/AIrail*",
+  ]
+end
+CASK
+  echo "▸ Wrote $AIRAIL_TAP/Casks/airail.rb"
+fi
+
 rm -rf "$BUILD_DIR"
 echo "✓ $DMG"
-echo "  $(du -h "$DMG" | cut -f1)  —  attach to the GitHub release, or open it to install."
+echo "  $(du -h "$DMG" | cut -f1)  —  sha256 $SHA"
+echo "  gh release create v$VERSION \"$DMG\" --title \"v$VERSION\" --notes-file NOTES.md"

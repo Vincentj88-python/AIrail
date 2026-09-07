@@ -2,22 +2,27 @@
 
 A screen-edge rail for macOS that tracks usage of the AI coding tools you actually run.
 
-No menu-bar clutter. A barely-there hairline hugs the edge of your screen; hover to expand it into a stack of provider marks with usage rings; click one for a glass HUD with session %, weekly usage, reset time, and a 7-day sparkline.
+No menu-bar clutter. A barely-there hairline hugs the edge of your screen and fills along its length as your nearest limit fills; hover to expand it into a stack of provider marks with usage rings; click one for a glass card with the session ring, the week, reset times, pace, and a Screen Time-style chart.
 
-| Collapsed | Hover | Stats overlay |
+| Collapsed | Hover | The card |
 | --- | --- | --- |
-| ![Collapsed hairline](renders/01-collapsed-hairline.png) | ![Hover logos](renders/02-hover-logos.png) | ![Stats overlay](renders/03-stats-overlay.png) |
+| ![Collapsed hairline](renders/01-collapsed-hairline.png) | ![Hover logos](renders/02-hover-logos.png) | ![The card](renders/03-stats-overlay.png) |
 
-## Why not another menu-bar meter?
+*These three are design renders. Real captures, shot from a build with `scripts/screenshots.sh` and badged `demo`, replace them at the v0.3.0 release.*
 
-[CodexBar](https://github.com/steipete/CodexBar) is a menu-bar meter farm — tiny icons, crowded status items, and you still have to click to learn anything. AIrail competes on UX:
+## Why the edge
 
-| CodexBar | AIrail |
-| --- | --- |
-| Menu bar status items | Left (or right) screen-edge rail |
-| Click a tiny icon | Hover to expand, click for a HUD overlay |
-| One provider at a time unless "merge icons" | All enabled tools visible as a vertical stack of logos |
-| Dense inspector menus | One glass overlay: session, weekly, reset, sparkline |
+There are plenty of menu-bar meters for these tools, and the best of them ([CodexBar](https://github.com/steipete/CodexBar)) covers far more providers than AIrail ever will. AIrail is a different bet: a meter you never open.
+
+**It lives where your eye already rests.** A hairline on the edge of the display, or under the notch, is in your peripheral vision all day. The menu bar is where you go to look for something; the edge is where you notice something.
+
+**The line itself is the reading.** It warms from a calm periwinkle to amber and then red as your nearest limit fills, and it fills along its length with that limit. You know you are at 80% of a session without a click, a glance at a number, or a notification.
+
+**One card, in Apple's own idiom.** Click a mark and the card reads like System Settings › Battery and Screen Time: a ring with the time elapsed in the window inside it, reset times that tick, the daily average against last week, cost beside each model and project, and a line that tells you when the figure moved while this Mac did nothing.
+
+**Honest by construction.** `live` only ever means a real read succeeded. Stale numbers expire at their own reset instead of lingering. Every estimate says *est.* Demo data wears a `demo` badge. Nothing is ever guessed to fill a gap.
+
+**Read-only, and provable.** AIrail borrows the sign-ins your tools already keep and never writes anything back. It talks to seven hosts, allowlisted in code, keeps no cache or cookie jar, and Settings › Privacy lists every host it has contacted since launch, what it keeps on disk, and what this build is signed with.
 
 ## Accounts
 
@@ -75,8 +80,11 @@ Download `AIrail-x.y.z.dmg` from the [latest release](https://github.com/Vincent
 
 Because AIrail reads the sign-ins of the tools you connect, it isn't sandboxed and so isn't on the App Store. Until it's notarized with an Apple Developer ID, macOS will block the first launch — this is expected:
 
-1. Open **Applications**, right-click **AIrail**, choose **Open**, then **Open** again. (Or: try to open it, then go to **System Settings › Privacy & Security** and click **Open Anyway**.)
-2. You only do this once. After that it launches normally, and updates keep it that way.
+1. Open **AIrail** from Applications. macOS says it can't check it for malware.
+2. Go to **System Settings › Privacy & Security**, scroll down, and click **Open Anyway** (on macOS 15 and later the old right-click › Open trick no longer works).
+3. You only do this once. After that it launches normally, and updates keep it that way.
+
+Once the repository is public there will also be a Homebrew tap: `brew install --cask vincentj88/airail/airail`. Notarized builds — no warning at all — follow as soon as there is a Developer ID; a GitHub Sponsors goal covers exactly that.
 
 The app has no Dock icon — look for the faint hairline on the edge of your screen (or the notch/island, depending on your settings).
 
@@ -100,7 +108,7 @@ Select the **AIrail** scheme and **Run** (⌘R). To build a signed DMG the way r
 
 Settings cover accounts (add, remove, show on rail), the rail's display and position — pick a display, then Left, Right, or (for the MacBook's built-in display) Notch; Automatic picks the outer edge of your whole desktop so the pointer rests on the hairline instead of sliding onto the next monitor, and the pane warns when a chosen edge is a seam — plus auto-hide delay, refresh interval, and launch at login.
 
-Launch flags for development: `--settings[=accounts]` opens Settings, `--add-account[=other]` opens the Add Account sheet (or its API-key page), `--overlay=<id>` opens the overlay for a provider.
+Launch flags for development: `--settings[=accounts]` opens Settings, `--add-account[=other]` opens the Add Account sheet (or its API-key page), `--overlay=<id>` opens the card for a provider, `--expanded` opens the rail as if hovered, and `--demo=<percent>` raises the busiest demo account to that figure. `scripts/screenshots.sh` uses the last three, with `-connectedAccounts '()' -railPosition top|left` on the command line (the defaults argument domain, so nothing persists) to shoot the README captures from demo data.
 
 AIrail is distributed as a signed DMG and source on GitHub, not through the App Store.
 

@@ -23,18 +23,24 @@ Developer ID waits until AIrail has earned the $99, so the go-public step is a
 free soft launch with a Sponsors goal first, notarization + licence + Show HN
 after (see "Order of work" in `ROADMAP.md`).
 
-**Blocks A and B done (2026-09-06/07)** on branch `tier1-block-a`: all ten
-block A items (each reviewed by a second agent, plus a polish pass) and all
-eleven block B items; the dated sections below record each one. Everything is
-**staged, not committed** (commit per item or in one go, your call). Test
-suite: 44 → 91 green, 5 live tests skipped as before, and no test touches the
-network any more. **By hand at v0.3.0:** re-create the "AIrail Dev"
-certificate with 10-year validity (one Claude Keychain re-prompt), check the
-General pane's height (320 → 380 is unverified), and run the app once to
-eyeball the new HUD lines (pace arc, wall countdown, used-elsewhere, cost
-captions, Screen Time header) — none of it has been seen on screen yet.
-**Next:** block C's first three items — `island-collapses-to-hairline`,
-`energy-honest-hairline`, `ambient-headroom` — then the ID-free block E items.
+**v0.3.0 code is done (2026-09-06/07)** on branch `tier1-block-a`: all of
+block A (each item reviewed by a second agent, plus a polish pass), all of
+block B, the first three block C items (Top position, Core Animation
+hairline, ambient headroom) and the ID-free block E items (drift detection,
+About + diagnostics, Privacy pane, capture flags + launch prep); the dated
+sections below record each one. Everything is **staged, not committed**
+(commit per item or in one go, your call). Test suite: 44 → 99 green, 5 live
+tests skipped as before, and no test touches the network any more.
+**By hand before v0.3.0:** run the app and eyeball everything new (block B's
+card lines, the Top position on an external display, the hairline fill,
+the island caption, Settings › Privacy, the menu's About / Report / Save
+Diagnostics); measure the hairline's idle CPU (`top -pid`, target ≤ 0.3 %);
+re-create the "AIrail Dev" certificate with 10-year validity; run
+`scripts/screenshots.sh` and swap the README table to the captures; record
+the first endpoint fixtures (`AIRAIL_LIVE=1 AIRAIL_RECORD_FIXTURES=1`).
+**Then the soft launch** per "Order of work" in ROADMAP.md, and the rest of
+block C (glint, announcements, morph, style tokens, first-run, Dock
+etiquette, pinned rail), block D and tier 2 once the Developer ID exists.
 
 Things established that reverse or extend earlier notes:
 
@@ -73,6 +79,36 @@ Things established that reverse or extend earlier notes:
 - **v0.3.0 launch scope (my pick):** tier 1 blocks A + B + E plus the first
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
+
+## Honest README, capture flags and launch prep (2026-09-07)
+
+Block E, the two items that could land without the Developer ID.
+**Captures:** `LaunchOptions` gained `--expanded` (the active surface opens
+as if hovered, 1.5 s after launch, same block as `--overlay`) and
+`--demo=<percent>` (raises the busiest demo account's session figure, so
+amber and red states can be shot honestly badged `demo`; parsed and clamped
+by a tested helper). `scripts/screenshots.sh` builds Debug, quits the
+running app, launches four states with `-connectedAccounts '()'
+-railPosition left|top` (the defaults argument domain — nothing read, nothing
+hit, nothing persisted), shoots fixed regions on the built-in display with
+`screencapture -x -R`, and relaunches /Applications/AIrail. **Not run yet:**
+it needs Screen Recording permission for the Terminal and the regions
+adjusted once for this desk; the README still shows the three renders, now
+captioned as renders, until the captures exist — swap the table to
+`screenshots/` then and delete `renders/`. **README:** the CodexBar table is
+gone (it understated the gap; CodexBar covers 69 providers), replaced by
+five "Why the edge" paragraphs; the hero copy and the install steps match
+macOS 15+ (Open Anyway, no right-click trick), with the tap and Sponsors
+goal named. **Launch prep:** `.github/FUNDING.yml`; `release.sh` notarizes
+and staples the app and the DMG when `AIRAIL_SIGN_IDENTITY` is a Developer
+ID and `AIRAIL_NOTARY_PROFILE` names a stored `notarytool` profile (no-ops
+on the self-signed cert), prints the sha256 and the `gh release create`
+line, and rewrites `Casks/airail.rb` in a tap checkout named by `AIRAIL_TAP`
+(github_latest livecheck, sonoma, quit on uninstall, zap of the three real
+paths). Still by hand, in order: Developer ID → `notarytool
+store-credentials` → run release.sh → create the `homebrew-airail` tap repo
+→ repo public → GitHub Sponsors with a $99 goal → soft announce; Show HN
+after notarization. 99 green (+1).
 
 ## Privacy & Security pane (2026-09-07)
 

@@ -1373,6 +1373,14 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(Diagnostics.issueURL(summary: "a b").query?.contains("template=bug.yml"), true)
     }
 
+    /// The capture flags read like the others: `--demo=91` is a percent, clamped.
+    func testDemoPeakLaunchFlag() {
+        XCTAssertEqual(LaunchOptions.demoPeak(in: ["AIrail", "--expanded", "--demo=91"]), 91)
+        XCTAssertEqual(LaunchOptions.demoPeak(in: ["AIrail", "--demo=140"]), 100, "clamped like every percent")
+        XCTAssertNil(LaunchOptions.demoPeak(in: ["AIrail", "--demo"]), "no figure, no override")
+        XCTAssertNil(LaunchOptions.demoPeak(in: ["AIrail", "--overlay=claude"]))
+    }
+
     /// The fixture tooling: a document's key paths, and a redacted copy that
     /// keeps the shape and the plan/model/date strings but nothing personal.
     func testJSONShapePathsAndRedaction() throws {

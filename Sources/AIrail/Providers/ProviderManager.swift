@@ -90,8 +90,14 @@ final class ProviderManager: ObservableObject {
                 kind: $0.kind
             )
         }
+        // `--demo=<peak>` (captures) raises the busiest demo account to that figure.
+        let busiest = providers.max { $0.demoProfile.sessionStart < $1.demoProfile.sessionStart }?.id
         for provider in providers {
-            demoEngines[provider.id] = MockUsageEngine(profile: provider.demoProfile)
+            var profile = provider.demoProfile
+            if let peak = LaunchOptions.demoPeak, provider.id == busiest {
+                profile.sessionStart = peak
+            }
+            demoEngines[provider.id] = MockUsageEngine(profile: profile)
         }
 
         settings.$refreshInterval

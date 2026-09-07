@@ -69,9 +69,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        if let providerId = LaunchOptions.overlayProviderId {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak overlay] in
-                overlay?.toggle(providerId: providerId)
+        if LaunchOptions.expandsOnLaunch || LaunchOptions.overlayProviderId != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self, weak overlay] in
+                guard let self else { return }
+                if LaunchOptions.expandsOnLaunch {
+                    if usingNotch { notchController?.expand() } else { railController?.expand() }
+                }
+                if let providerId = LaunchOptions.overlayProviderId {
+                    overlay?.toggle(providerId: providerId)
+                }
             }
         }
 
