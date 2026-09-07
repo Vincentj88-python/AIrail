@@ -38,6 +38,38 @@ struct UsageProjection: Sendable, Equatable {
     var hoursToLimit: Double { max(0, hitsLimitAt.timeIntervalSinceNow / 3600) }
 }
 
+/// Where a usage figure sits against the time elapsed in its window: plain
+/// arithmetic on two live numbers and the clock, no slope fitting, nothing
+/// estimated. 40% used with 40% of the window gone is an even pace.
+struct UsagePace: Sendable, Equatable {
+    /// How much of the window has elapsed, 0...1.
+    let elapsed: Double
+    /// Percentage points used minus the even-pace share of the window.
+    let delta: Double
+    /// Time left in the window.
+    let remaining: TimeInterval
+    /// "session" or the provider's period label.
+    let basis: String
+
+    static func of(percent: Double?, window: DateInterval?, basis: String, now: Date = Date()) -> UsagePace? {
+        guard let percent, let window, window.duration > 0, now >= window.start, now < window.end else { return nil }
+        let elapsed = now.timeIntervalSince(window.start) / window.duration
+        return UsagePace(
+            elapsed: elapsed,
+            delta: percent - elapsed * 100,
+            remaining: window.end.timeIntervalSince(now),
+            basis: basis
+        )
+    }
+
+    /// "12 pts above an even pace", "8 pts under an even pace", or the even pace itself.
+    var summary: String {
+        let points = Int(delta.rounded())
+        if abs(points) < 3 { return "On an even pace through the \(basis)" }
+        return "\(abs(points)) pts \(points > 0 ? "above" : "under") an even pace"
+    }
+}
+
 extension UsageFormatting {
     /// "30m", "2h 24m", "3d 4h" — a span the way the Battery pane writes one.
     /// Hours and minutes under two days, days and hours beyond; never "0m",

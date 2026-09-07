@@ -71,6 +71,29 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Pace against the window (2026-09-07)
+
+Block B. The session window was a hard-coded `resetsAt − 5 h` in the HUD;
+now every provider states its bounds from what its service sends:
+`UsageSnapshot.sessionWindowLength` (Claude 5 h — the response key is
+`five_hour`; Codex from `limit_window_seconds`, kept in the report; Mock 5 h)
+and `periodStartsAt` (Cursor `billingCycleStart`, previously parsed and
+ignored; Copilot the reset minus one calendar month; Claude/Codex the weekly
+reset minus its length). `sessionWindow` / `periodWindow` derive the
+intervals; the chart's shading reads `sessionWindow`. `UsagePace.of(percent:
+window:basis:now:)` in UsageInsights is arithmetic on two live numbers and the
+clock — elapsed share, points above or under an even pace, time left — nil
+outside the window (a stale snapshot past its reset shows no arc, never a
+full one). The HUD ring gains a thinner white elapsed-time arc just inside
+the 9 pt ring and a "2h 10m left" caption under the percent, inside a
+once-a-minute `TimelineView`; the burn-rate slot, blank most of the time,
+shows "12 pts above an even pace" whenever there is no projection. `LogoMark`
+gets an optional 2 pt "now" tick on the ring (rail and island marks pass the
+elapsed share), so a fill running ahead of the tick reads as fast. No
+`est.` label: nothing is estimated. The verifier's note that a second
+concentric arc doesn't fit the 44 pt marks stands — hence the tick.
+`testPaceMath`, `testWindowsCarryTheirStartAndLength`. 81 green (+2).
+
 ## Sleep, wake and offline awareness (2026-09-07)
 
 Block B. The `.common`-mode timer doesn't fire during sleep but an overdue

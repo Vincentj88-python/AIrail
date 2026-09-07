@@ -900,6 +900,78 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(UsageSeverity.of(100), .critical)
     }
 
+    /// Pace is arithmetic on two live numbers and the clock: percent used
+    /// against the share of the window that has elapsed.
+    func testPaceMath() throws {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let window = DateInterval(start: start, end: start.addingTimeInterval(5 * 3600))
+        let pace = try XCTUnwrap(UsagePace.of(percent: 52, window: window, basis: "session", now: start.addingTimeInterval(2 * 3600)))
+        XCTAssertEqual(pace.elapsed, 0.4, accuracy: 0.0001)
+        XCTAssertEqual(pace.delta, 12, accuracy: 0.0001)
+        XCTAssertEqual(pace.remaining, 3 * 3600, accuracy: 0.5)
+        XCTAssertEqual(pace.summary, "12 pts above an even pace")
+        XCTAssertEqual(UsagePace.of(percent: 30, window: window, basis: "session", now: start.addingTimeInterval(2 * 3600))?.summary, "10 pts under an even pace")
+        XCTAssertEqual(UsagePace.of(percent: 41, window: window, basis: "session", now: start.addingTimeInterval(2 * 3600))?.summary, "On an even pace through the session")
+        XCTAssertNil(UsagePace.of(percent: 52, window: window, basis: "session", now: window.end), "past the reset there is no pace, not a full arc")
+        XCTAssertNil(UsagePace.of(percent: 52, window: window, basis: "session", now: start.addingTimeInterval(-1)))
+        XCTAssertNil(UsagePace.of(percent: nil, window: window, basis: "session", now: start))
+        XCTAssertNil(UsagePace.of(percent: 52, window: nil, basis: "session", now: start))
+
+        var snapshot = UsageSnapshot.empty(providerId: "claude", displayName: "Claude", status: .ok)
+        snapshot.sessionPercent = 52
+        snapshot.resetsAt = window.end
+        snapshot.sessionWindowLength = 5 * 3600
+        snapshot.weeklyPercent = 20
+        snapshot.weeklyResetsAt = start.addingTimeInterval(7 * 24 * 3600)
+        snapshot.periodStartsAt = start
+        XCTAssertEqual(snapshot.sessionWindow, window)
+        XCTAssertEqual(snapshot.pace(now: start.addingTimeInterval(2 * 3600))?.basis, "session", "the session window is the one judged when there is one")
+        snapshot.sessionPercent = nil
+        let weekly = try XCTUnwrap(snapshot.pace(now: start.addingTimeInterval(3.5 * 24 * 3600)))
+        XCTAssertEqual(weekly.basis, "weekly")
+        XCTAssertEqual(weekly.delta, -30, accuracy: 0.0001, "20% used at half-week is 30 points under")
+    }
+
+    /// Every provider states its window bounds from what its service sends:
+    /// Codex says the length in seconds, Cursor the cycle's start, Copilot the
+    /// reset (a calendar month after the pool began), Claude's is five hours.
+    func testWindowsCarryTheirStartAndLength() throws {
+        let codex = try CodexUsage.parse(Data(#"""
+        {"plan_type":"plus","rate_limit":{
+          "primary_window":{"used_percent":40,"limit_window_seconds":18000,"reset_at":1800018000},
+          "secondary_window":{"used_percent":20,"limit_window_seconds":604800,"reset_at":1800604800}}}
+        """#.utf8))
+        XCTAssertEqual(codex.sessionWindowSeconds, 18000)
+        XCTAssertEqual(codex.weeklyWindowSeconds, 604800)
+        let codexSnapshot = CodexUsage.snapshot(
+            report: codex, credential: CodexUsage.Credential(accessToken: "t", accountId: nil, email: nil, plan: nil),
+            transcripts: nil, providerId: "codex", displayName: "Codex"
+        )
+        XCTAssertEqual(codexSnapshot.sessionWindowLength, 18000)
+        XCTAssertEqual(codexSnapshot.periodStartsAt?.timeIntervalSince1970, 1_800_000_000)
+        XCTAssertEqual(codexSnapshot.sessionWindow?.start.timeIntervalSince1970, 1_800_000_000)
+
+        let cursor = try CursorUsage.parse(Data(#"""
+        {"billingCycleStart":"2026-08-25T06:00:19.000Z","billingCycleEnd":"2026-09-25T06:00:19.000Z",
+         "membershipType":"pro","individualUsage":{"plan":{"totalPercentUsed":12}}}
+        """#.utf8))
+        XCTAssertEqual(cursor.cycleStart, DateParsing.iso8601("2026-08-25T06:00:19.000Z"))
+        let cursorSnapshot = CursorUsage.snapshot(
+            report: cursor, credential: CursorUsage.Credential(userId: "u", accessToken: "t", expiresAt: nil, email: nil, plan: nil),
+            detail: UsageDetail(), providerId: "cursor", displayName: "Cursor"
+        )
+        XCTAssertEqual(cursorSnapshot.periodWindow?.duration ?? 0, 31 * 24 * 3600, accuracy: 1)
+
+        let copilot = try CopilotUsage.parse(Data(#"""
+        {"copilot_plan":"pro","quota_reset_date":"2026-10-01",
+         "quota_snapshots":{"premium_interactions":{"percent_remaining":50,"unlimited":false,"entitlement":300,"remaining":150}}}
+        """#.utf8))
+        let copilotSnapshot = CopilotUsage.snapshot(report: copilot, providerId: "copilot", displayName: "Copilot")
+        let reset = try XCTUnwrap(copilotSnapshot.weeklyResetsAt)
+        let began = try XCTUnwrap(copilotSnapshot.periodStartsAt)
+        XCTAssertEqual(Calendar.current.dateComponents([.month], from: began, to: reset).month, 1)
+    }
+
     func testDurationFormatting() {
         let us = Locale(identifier: "en_US")
         let gb = Locale(identifier: "en_GB")

@@ -66,8 +66,10 @@ enum CodexUsage {
     struct Report: Sendable {
         var sessionPercent: Double?
         var sessionResetsAt: Date?
+        var sessionWindowSeconds: TimeInterval?
         var weeklyPercent: Double?
         var weeklyResetsAt: Date?
+        var weeklyWindowSeconds: TimeInterval?
         var plan: String?
         var email: String?
         var credits: Double?
@@ -114,9 +116,11 @@ enum CodexUsage {
             if seconds <= 24 * 3600 {
                 report.sessionPercent = percent
                 report.sessionResetsAt = resetsAt
+                report.sessionWindowSeconds = seconds > 0 ? seconds : nil
             } else {
                 report.weeklyPercent = percent
                 report.weeklyResetsAt = resetsAt
+                report.weeklyWindowSeconds = seconds
             }
         }
         guard report.sessionPercent != nil || report.weeklyPercent != nil else {
@@ -205,8 +209,15 @@ enum CodexUsage {
             status: .ok,
             lastUpdated: now,
             weeklyResetsAt: report.weeklyResetsAt,
+            sessionWindowLength: report.sessionWindowSeconds,
+            periodStartsAt: zip(report.weeklyResetsAt, report.weeklyWindowSeconds).map { $0.addingTimeInterval(-$1) },
             account: report.email ?? credential.email,
             detail: detail
         )
     }
+}
+
+private func zip<A, B>(_ a: A?, _ b: B?) -> (A, B)? {
+    guard let a, let b else { return nil }
+    return (a, b)
 }

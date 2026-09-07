@@ -210,7 +210,8 @@ private struct NotchMarksRow: View {
                 percent: snapshot?.ringPercent,
                 size: NotchWindowController.markSize,
                 isSelected: ui.selectedProviderId == info.id,
-                onDark: true
+                onDark: true,
+                elapsed: snapshot?.status == .ok ? snapshot?.pace()?.elapsed : nil
             )
         }
         .buttonStyle(.plain)

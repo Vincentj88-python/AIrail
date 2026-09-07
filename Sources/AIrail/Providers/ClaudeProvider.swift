@@ -232,6 +232,8 @@ enum ClaudeUsage {
             status: .ok,
             lastUpdated: now,
             weeklyResetsAt: report.weeklyResetsAt,
+            sessionWindowLength: 5 * 3600, // the response key is five_hour; the length is in its name
+            periodStartsAt: report.weeklyResetsAt?.addingTimeInterval(-7 * 24 * 3600),
             detail: detail
         )
     }

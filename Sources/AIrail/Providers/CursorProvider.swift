@@ -141,6 +141,7 @@ enum CursorUsage {
         var apiPercentUsed: Double?
         var autoMessage: String?
         var apiMessage: String?
+        var cycleStart: Date?
         var cycleEnd: Date?
         var plan: String?
     }
@@ -191,6 +192,7 @@ enum CursorUsage {
             apiPercentUsed: unlimited ? nil : plan.double("apiPercentUsed").map(UsageSnapshot.clampPercent),
             autoMessage: json.string("autoModelSelectedDisplayMessage"),
             apiMessage: json.string("namedModelSelectedDisplayMessage"),
+            cycleStart: DateParsing.iso8601(json.string("billingCycleStart")),
             cycleEnd: DateParsing.iso8601(json.string("billingCycleEnd")),
             plan: planLabel(json.string("membershipType"))
         )
@@ -292,6 +294,7 @@ enum CursorUsage {
             lastUpdated: now,
             periodLabel: "billing cycle",
             weeklyResetsAt: report.cycleEnd,
+            periodStartsAt: report.cycleStart,
             account: credential.email,
             detail: detail
         )

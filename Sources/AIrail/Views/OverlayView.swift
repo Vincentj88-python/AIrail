@@ -230,6 +230,8 @@ struct OverlayView: View {
                     .padding(.top, 4)
                     if let projection = manager.projection(for: info.id) {
                         burnRate(projection, info: info)
+                    } else if let snapshot, snapshot.status == .ok, let pace = snapshot.pace() {
+                        paceLine(pace, info: info)
                     }
                     if let lastUpdated = snapshot?.lastUpdated {
                         HStack(spacing: 6) {
@@ -280,26 +282,63 @@ struct OverlayView: View {
             : "About \(UsageFormatting.duration(hours: projection.hoursToLimit)) to the limit at the current pace")
     }
 
+    /// "12 pts above an even pace" — where the figure sits against the time
+    /// elapsed in its window. Two live numbers and the clock, nothing estimated.
+    private func paceLine(_ pace: UsagePace, info: ProviderInfo) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "gauge.with.dots.needle.33percent")
+                .foregroundStyle(pace.delta >= 10 ? info.color : Color.secondary)
+            Text(pace.summary)
+                .foregroundStyle(.secondary)
+        }
+        .font(.subheadline)
+        .padding(.top, 2)
+        .help("\(Int((pace.elapsed * 100).rounded()))% of the \(pace.basis) window has passed; an even pace would have used that share of the limit.")
+        .accessibilityLabel(pace.summary)
+    }
+
     private func sessionRing(info: ProviderInfo, snapshot: UsageSnapshot?) -> some View {
         let percent = snapshot?.ringPercent
         let label = snapshot?.sessionPercent != nil ? "Session usage" : "\(snapshot?.periodLabel ?? "Weekly") usage"
-        return ZStack {
-            Circle()
-                .stroke(info.color.opacity(0.18), lineWidth: 9)
-            Circle()
-                .trim(from: 0, to: (percent ?? 0) / 100)
-                .stroke(info.color, style: StrokeStyle(lineWidth: 9, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .animation(.easeInOut(duration: 0.5), value: percent)
-            HStack(alignment: .firstTextBaseline, spacing: 1) {
-                Text(percent.map { "\(Int($0.rounded()))" } ?? "—")
-                    .font(.system(size: 42, weight: .semibold))
-                    .monospacedDigit()
-                    .contentTransition(.numericText(value: percent ?? 0))
-                    .animation(.default, value: percent)
-                Text("%")
-                    .font(.system(size: 19, weight: .medium))
-                    .foregroundStyle(.secondary)
+        // Once a minute, so the elapsed arc and the "left" caption keep time
+        // between refreshes.
+        return TimelineView(.periodic(from: .now, by: 60)) { context in
+            let pace = snapshot?.status == .ok ? snapshot?.pace(now: context.date) : nil
+            ZStack {
+                Circle()
+                    .stroke(info.color.opacity(0.18), lineWidth: 9)
+                Circle()
+                    .trim(from: 0, to: (percent ?? 0) / 100)
+                    .stroke(info.color, style: StrokeStyle(lineWidth: 9, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeInOut(duration: 0.5), value: percent)
+                // Time elapsed in the window, as a thinner arc just inside the
+                // ring: a fill that runs ahead of it is faster than an even pace.
+                if let pace {
+                    Circle()
+                        .trim(from: 0, to: pace.elapsed)
+                        .stroke(Color.white.opacity(0.35), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .padding(11)
+                }
+                VStack(spacing: 1) {
+                    HStack(alignment: .firstTextBaseline, spacing: 1) {
+                        Text(percent.map { "\(Int($0.rounded()))" } ?? "—")
+                            .font(.system(size: 42, weight: .semibold))
+                            .monospacedDigit()
+                            .contentTransition(.numericText(value: percent ?? 0))
+                            .animation(.default, value: percent)
+                        Text("%")
+                            .font(.system(size: 19, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    if let pace {
+                        Text("\(UsageFormatting.duration(hours: pace.remaining / 3600)) left")
+                            .font(.caption2)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .frame(width: 138, height: 138)
@@ -330,11 +369,10 @@ struct OverlayView: View {
 
     // MARK: Chart
 
-    /// The rolling 5-hour window the session ring measures, ending at the
-    /// reported reset time. Only providers with a session concept have one.
+    /// The rolling session window the ring measures, ending at the reported
+    /// reset time; its length comes from the provider, not a constant.
     private func sessionWindow(snapshot: UsageSnapshot?) -> DateInterval? {
-        guard let snapshot, snapshot.sessionPercent != nil, let resetsAt = snapshot.resetsAt else { return nil }
-        return DateInterval(start: resetsAt.addingTimeInterval(-5 * 3600), end: resetsAt)
+        snapshot?.sessionWindow
     }
 
     // MARK: Footer

@@ -43,6 +43,12 @@ struct UsageSnapshot: Identifiable, Sendable, Equatable {
     var unitLabel: String = "requests"
     /// When the longer window resets, if the provider reports it separately.
     var weeklyResetsAt: Date? = nil
+    /// How long the session window is (5 h for Claude, whatever Codex says),
+    /// so its start is known and pace can be judged against elapsed time.
+    var sessionWindowLength: TimeInterval? = nil
+    /// When the longer window began: the billing cycle start, the month's
+    /// start, or the reset minus the window's length.
+    var periodStartsAt: Date? = nil
     /// Who is signed in (an email or handle), when the source reveals it.
     var account: String? = nil
     /// Set by `expiringWindows`: the reset time of a window whose numbers
@@ -79,6 +85,30 @@ extension UsageSnapshot {
     /// That window the way the text names it: "session", or the period label.
     var ringWindowLabel: String {
         sessionPercent != nil ? "session" : periodLabel
+    }
+
+    /// The session window as an interval, when there is one and its bounds are known.
+    var sessionWindow: DateInterval? {
+        guard sessionPercent != nil, let end = resetsAt, let length = sessionWindowLength, length > 0 else { return nil }
+        return DateInterval(start: end.addingTimeInterval(-length), end: end)
+    }
+
+    /// The longer window as an interval, when both of its bounds are known.
+    var periodWindow: DateInterval? {
+        guard let start = periodStartsAt,
+              let end = weeklyResetsAt ?? (sessionPercent == nil ? resetsAt : nil),
+              end > start
+        else { return nil }
+        return DateInterval(start: start, end: end)
+    }
+
+    /// Where the ring's figure sits against the time elapsed in its window —
+    /// the session's when there is one, else the longer window's.
+    func pace(now: Date = Date()) -> UsagePace? {
+        if sessionPercent != nil {
+            return UsagePace.of(percent: sessionPercent, window: sessionWindow, basis: "session", now: now)
+        }
+        return UsagePace.of(percent: weeklyPercent, window: periodWindow, basis: periodLabel, now: now)
     }
 
     /// The same numbers, re-labelled — used to keep the last real reading on

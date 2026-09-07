@@ -158,7 +158,8 @@ private struct ExpandedRailContent: View {
                     brandIconPath: info.brandIconPath,
                     percent: snapshot?.ringPercent,
                     size: 44,
-                    isSelected: ui.selectedProviderId == info.id
+                    isSelected: ui.selectedProviderId == info.id,
+                    elapsed: snapshot?.status == .ok ? snapshot?.pace()?.elapsed : nil
                 )
             }
             .buttonStyle(.plain)

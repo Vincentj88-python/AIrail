@@ -195,6 +195,8 @@ enum CopilotUsage {
             periodLabel: report.meter == "chat" ? "monthly chat" : (report.meter == "credits" ? "monthly" : "monthly premium"),
             unitLabel: report.meter == "credits" ? "AI credits" : "requests",
             weeklyResetsAt: report.resetsAt,
+            // The pool is monthly: it began one calendar month before it resets.
+            periodStartsAt: report.resetsAt.flatMap { Calendar.current.date(byAdding: .month, value: -1, to: $0) },
             account: report.login,
             detail: UsageDetail(meters: report.meters)
         )

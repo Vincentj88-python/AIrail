@@ -12,6 +12,9 @@ struct LogoMark: View {
     /// True on the black notch/island, where the frosted disc and faint track
     /// go muddy; uses a cleaner dark seat and a track that reads on black.
     var onDark = false
+    /// How much of the window has elapsed (0...1): drawn as a small tick on
+    /// the ring, so a fill ahead of the tick reads as faster than an even pace.
+    var elapsed: Double? = nil
 
     private var ringWidth: CGFloat { max(2.5, size * (onDark ? 0.07 : 0.062)) }
 
@@ -31,6 +34,13 @@ struct LogoMark: View {
                     .stroke(color, style: StrokeStyle(lineWidth: ringWidth, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .padding(ringWidth / 2)
+            }
+            if let elapsed {
+                Capsule()
+                    .fill(Color.white.opacity(onDark ? 0.7 : 0.55))
+                    .frame(width: 2, height: ringWidth + 2)
+                    .offset(y: -(size / 2 - ringWidth))
+                    .rotationEffect(.degrees(min(max(elapsed, 0), 1) * 360))
             }
             disc
                 .padding(ringWidth * 2)

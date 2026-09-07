@@ -90,6 +90,8 @@ final class MockUsageEngine {
             status: .demo,
             lastUpdated: Date(),
             weeklyResetsAt: Self.nextMondayNine(),
+            sessionWindowLength: 5 * 3600,
+            periodStartsAt: Self.nextMondayNine().addingTimeInterval(-7 * 24 * 3600),
             detail: demoDetail()
         )
     }
