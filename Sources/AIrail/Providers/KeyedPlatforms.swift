@@ -230,7 +230,6 @@ enum AnthropicAPIUsage {
         snapshot.plan = "Pay as you go"
         snapshot.lastUpdated = now
         let series = UsageBucketing.series(days, count: 7, component: .day, endingAt: now, calendar: calendar)
-        snapshot.weeklyHistory = series.map { $0.usage.tokens.total }
         snapshot.detail = UsageDetail(days: series, week: week)
         return snapshot
     }
@@ -331,7 +330,6 @@ enum OpenAIAPIUsage {
         snapshot.plan = "Pay as you go"
         snapshot.lastUpdated = now
         let series = UsageBucketing.series(days, count: 7, component: .day, endingAt: now, calendar: calendar)
-        snapshot.weeklyHistory = series.map { $0.usage.tokens.total }
         snapshot.detail = UsageDetail(days: series, week: week)
         return snapshot
     }

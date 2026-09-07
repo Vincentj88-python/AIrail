@@ -62,6 +62,24 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Remove: v0.1 snapshot fields (2026-09-06)
+
+- **Gone from `UsageSnapshot`:** `sessionUsed`/`sessionLimit` (nil at every
+  builder, read nowhere), `weeklyHistory` + `historyDates` (all nine builders
+  filled it from the same series that feeds `detail.days`, so the chart's
+  fallback branch could never run) and `UsageStatus.outage` (emitted nowhere).
+  Same pass: `JWT.expiry`, the scanner's `newestEventDate` (written, never
+  read) and `CursorUsage.Report.onDemandEnabled` (parsed for one assertion;
+  Cursor's on-demand units are undocumented, so nothing ever showed it).
+- **`detail` is non-optional now** — `UsageDetail()` when a source has no
+  breakdown — and `UsageChartSection` is `init(detail:color:sessionWindow:)`,
+  drawing the 7-day sparkline from `detail.days` only. No behaviour change;
+  36 lines in, 88 out.
+- **Rule from here:** the ledger, level line and pace build on
+  `detail.days: [UsageBucket]`; nobody revives a parallel `[Double]`. The
+  used-elsewhere item re-adds the newest event as `UsageDetail.newestLocalEvent`.
+- 45 tests green; six test sites moved to `detail.days`, none added.
+
 ## Hardened, attested builds (2026-09-06)
 
 - **What was wrong:** `release.sh` let `xcodebuild build` do the signing, and

@@ -26,13 +26,11 @@ struct OverlayView: View {
                 notice
             }
             sessionSection(info: info, snapshot: snapshot)
-            if let meters = snapshot?.detail?.meters, !meters.isEmpty {
+            if let meters = snapshot?.detail.meters, !meters.isEmpty {
                 MetersList(meters: meters, color: info.color)
             }
             UsageChartSection(
-                detail: snapshot?.detail,
-                fallbackHistory: snapshot?.weeklyHistory ?? [],
-                fallbackDates: snapshot?.historyDates ?? [],
+                detail: snapshot?.detail ?? UsageDetail(),
                 color: info.color,
                 sessionWindow: sessionWindow(snapshot: snapshot)
             )
@@ -143,7 +141,7 @@ struct OverlayView: View {
                 }
                 .font(.subheadline)
             )
-        case .stale, .error, .outage:
+        case .stale, .error:
             guard let error = manager.lastErrors[info.id] else { return nil }
             return AnyView(
                 Label(error.errorDescription ?? error.shortDescription, systemImage: "exclamationmark.triangle")

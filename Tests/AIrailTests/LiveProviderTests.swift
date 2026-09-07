@@ -18,7 +18,7 @@ final class LiveProviderTests: XCTestCase {
         print("codex:", describe(snapshot))
         XCTAssertEqual(snapshot.status, .ok)
         XCTAssertNotNil(snapshot.ringPercent)
-        XCTAssertEqual(snapshot.weeklyHistory.count, 7)
+        XCTAssertEqual(snapshot.detail.days.count, 7)
     }
 
     @MainActor
@@ -93,9 +93,9 @@ final class LiveProviderTests: XCTestCase {
         "plan=\(s.plan ?? "-") session=\(s.sessionPercent.map { "\($0)%" } ?? "-") "
             + "\(s.periodLabel)=\(s.weeklyPercent.map { "\($0)%" } ?? "-") used=\(s.weeklyUsed ?? -1)/\(s.weeklyLimit ?? -1) "
             + "resets=\(s.resetsAt?.description ?? "-") \(s.periodLabel)Resets=\(s.weeklyResetsAt?.description ?? "-") "
-            + "history=\(s.weeklyHistory.map { Int($0) }) account=\(s.account.map { _ in "<set>" } ?? "-") "
-            + "models=\(s.detail?.byModel.prefix(3).map { "\($0.name):\(UsageFormatting.compactTokens($0.tokens))" } ?? []) "
-            + "meters=\(s.detail?.meters.map { "\($0.name):\($0.percent.map { Int($0) } ?? -1)" } ?? []) "
-            + "hours=\(s.detail?.hours.count ?? 0) week=\(s.detail?.week.messages ?? 0)req"
+            + "history=\(s.detail.days.map { Int($0.usage.tokens.total) }) account=\(s.account.map { _ in "<set>" } ?? "-") "
+            + "models=\(s.detail.byModel.prefix(3).map { "\($0.name):\(UsageFormatting.compactTokens($0.tokens))" }) "
+            + "meters=\(s.detail.meters.map { "\($0.name):\($0.percent.map { Int($0) } ?? -1)" }) "
+            + "hours=\(s.detail.hours.count) week=\(s.detail.week.messages)req"
     }
 }

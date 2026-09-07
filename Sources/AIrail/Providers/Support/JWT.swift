@@ -15,8 +15,4 @@ enum JWT {
         else { return nil }
         return JSONObject(object)
     }
-
-    static func expiry(_ token: String) -> Date? {
-        DateParsing.unixSeconds(claims(token)?.double("exp"))
-    }
 }

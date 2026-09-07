@@ -22,7 +22,7 @@ extension UsageStatus {
         case .ok: return .green
         case .demo: return .gray
         case .stale: return .orange
-        case .error, .outage: return .red
+        case .error: return .red
         }
     }
 }

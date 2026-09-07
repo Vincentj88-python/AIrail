@@ -156,8 +156,6 @@ enum CopilotUsage {
         UsageSnapshot(
             providerId: providerId,
             displayName: displayName,
-            sessionUsed: nil,
-            sessionLimit: nil,
             sessionPercent: nil,
             weeklyUsed: report.used,
             weeklyLimit: report.limit,
@@ -169,7 +167,6 @@ enum CopilotUsage {
             plan: report.plan,
             status: .ok,
             lastUpdated: now,
-            weeklyHistory: [],
             periodLabel: report.meter == "chat" ? "monthly chat" : "monthly premium",
             weeklyResetsAt: report.resetsAt,
             account: report.login,

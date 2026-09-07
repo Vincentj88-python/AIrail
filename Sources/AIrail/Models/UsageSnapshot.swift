@@ -1,7 +1,7 @@
 import Foundation
 
 enum UsageStatus: String, Sendable {
-    case ok, demo, stale, error, outage
+    case ok, demo, stale, error
 
     /// The word shown on the status pill. `ok` reads as "live" to a human.
     var label: String {
@@ -13,8 +13,6 @@ struct UsageSnapshot: Identifiable, Sendable {
     var id: String { providerId }
     var providerId: String
     var displayName: String
-    var sessionUsed: Double?
-    var sessionLimit: Double?
     var sessionPercent: Double?   // 0...100
     var weeklyUsed: Double?
     var weeklyLimit: Double?
@@ -28,7 +26,6 @@ struct UsageSnapshot: Identifiable, Sendable {
     var plan: String?
     var status: UsageStatus
     var lastUpdated: Date
-    var weeklyHistory: [Double]   // 7 points, oldest first
     /// What the "weekly" numbers actually cover for this provider: some meter
     /// a calendar month or a billing cycle instead of a rolling week.
     var periodLabel: String = "weekly"
@@ -38,7 +35,7 @@ struct UsageSnapshot: Identifiable, Sendable {
     var account: String? = nil
     /// Hourly/daily buckets, model and project shares, meters — whatever the
     /// source exposes beyond the headline numbers.
-    var detail: UsageDetail? = nil
+    var detail = UsageDetail()
 }
 
 extension UsageSnapshot {
@@ -57,15 +54,6 @@ extension UsageSnapshot {
         (sessionPercent ?? weeklyPercent).map(Self.clampPercent)
     }
 
-    /// The seven local days covered by `weeklyHistory`, oldest first, ending today.
-    var historyDates: [Date] {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        return (0..<weeklyHistory.count).compactMap {
-            calendar.date(byAdding: .day, value: $0 - (weeklyHistory.count - 1), to: today)
-        }
-    }
-
     /// The same numbers, re-labelled — used to keep the last real reading on
     /// screen (as `stale`) when a refresh fails.
     func marking(_ status: UsageStatus) -> UsageSnapshot {
@@ -79,8 +67,6 @@ extension UsageSnapshot {
         UsageSnapshot(
             providerId: providerId,
             displayName: displayName,
-            sessionUsed: nil,
-            sessionLimit: nil,
             sessionPercent: nil,
             weeklyUsed: nil,
             weeklyLimit: nil,
@@ -91,8 +77,7 @@ extension UsageSnapshot {
             spendCap: nil,
             plan: nil,
             status: status,
-            lastUpdated: Date(),
-            weeklyHistory: []
+            lastUpdated: Date()
         )
     }
 }

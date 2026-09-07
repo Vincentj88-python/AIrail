@@ -69,7 +69,7 @@ final class AIrailTests: XCTestCase {
             let engine = MockUsageEngine(profile: provider.demoProfile)
             let snapshot = engine.snapshot(providerId: provider.id, displayName: provider.displayName)
             XCTAssertEqual(snapshot.providerId, provider.id)
-            XCTAssertEqual(snapshot.weeklyHistory.count, 7)
+            XCTAssertEqual(snapshot.detail.days.count, 7)
             XCTAssertEqual(snapshot.status, .demo, "demo data is always badged demo")
             if let percent = snapshot.sessionPercent {
                 XCTAssertTrue((0...100).contains(percent))
@@ -495,7 +495,6 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(report.percentUsed!, 1.45, accuracy: 0.01)
         XCTAssertEqual(report.plan, "Pro+")
         XCTAssertEqual(report.cycleEnd?.timeIntervalSince1970, 1_790_316_019)
-        XCTAssertFalse(report.onDemandEnabled)
         XCTAssertThrowsError(try CursorUsage.parse(Data("{}".utf8)))
     }
 
@@ -516,7 +515,7 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(page.events.count, 3)
         XCTAssertEqual(page.events[1].tokens.total, 0, "calls without token usage still count as requests")
 
-        let report = CursorUsage.Report(percentUsed: 1.45, autoPercentUsed: 0.7, apiPercentUsed: 12.2, autoMessage: "auto", apiMessage: "api", cycleEnd: nil, plan: "Pro+", onDemandEnabled: false)
+        let report = CursorUsage.Report(percentUsed: 1.45, autoPercentUsed: 0.7, apiPercentUsed: 12.2, autoMessage: "auto", apiMessage: "api", cycleEnd: nil, plan: "Pro+")
         let detail = CursorUsage.detail(events: page.events, report: report, days: 7, now: now, calendar: calendar)
         XCTAssertEqual(detail.hours.count, 24)
         XCTAssertEqual(detail.days.count, 7)
@@ -582,11 +581,12 @@ final class AIrailTests: XCTestCase {
         let cost = #"{"data":[{"starting_at":"\#(iso)","results":[{"currency":"USD","amount":"1234.5","cost_type":"tokens"},{"currency":"USD","amount":"100","cost_type":"web_search"}]}]}"#
         let snapshot = try AnthropicAPIUsage.snapshot(usageData: Data(usage.utf8), costData: Data(cost.utf8), providerId: "anthropic-api", displayName: "Anthropic API", now: now)
         XCTAssertEqual(snapshot.spend!, 13.345, accuracy: 0.0001, "cost amounts are minor units")
-        XCTAssertEqual(snapshot.weeklyHistory.count, 7)
-        XCTAssertEqual(snapshot.weeklyHistory.last, 1000 + 500 + 8000 + 500 + 150)
-        XCTAssertEqual(snapshot.detail?.byModel.first?.name, "claude-opus-5")
-        XCTAssertEqual(snapshot.detail?.week.tokens.cacheWrite, 500)
-        XCTAssertEqual(calendar.startOfDay(for: snapshot.detail!.days.last!.start), calendar.startOfDay(for: now))
+        XCTAssertEqual(snapshot.detail.days.count, 7)
+        let today = try XCTUnwrap(snapshot.detail.days.last)
+        XCTAssertEqual(today.usage.tokens.total, 1000 + 500 + 8000 + 500 + 150)
+        XCTAssertEqual(snapshot.detail.byModel.first?.name, "claude-opus-5")
+        XCTAssertEqual(snapshot.detail.week.tokens.cacheWrite, 500)
+        XCTAssertEqual(calendar.startOfDay(for: today.start), calendar.startOfDay(for: now))
 
         let url = AnthropicAPIUsage.usageURL(now: now).absoluteString
         XCTAssertTrue(url.contains("bucket_width=1d") && url.contains("group_by%5B%5D=model"), url)
@@ -602,10 +602,10 @@ final class AIrailTests: XCTestCase {
         let costs = #"{"object":"page","data":[{"object":"bucket","start_time":\#(todayUTC),"results":[{"object":"organization.costs.result","amount":{"value":0.06,"currency":"usd"}},{"object":"organization.costs.result","amount":{"value":1.5,"currency":"usd"}}]}]}"#
         let snapshot = try OpenAIAPIUsage.snapshot(usageData: Data(usage.utf8), costData: Data(costs.utf8), providerId: "openai-api", displayName: "OpenAI API", now: now)
         XCTAssertEqual(snapshot.spend!, 1.56, accuracy: 0.0001)
-        XCTAssertEqual(snapshot.detail?.week.tokens.input, 2000, "input is reported uncached")
-        XCTAssertEqual(snapshot.detail?.week.tokens.cacheRead, 3000)
-        XCTAssertEqual(snapshot.detail?.week.messages, 12)
-        XCTAssertEqual(snapshot.detail?.byModel.first?.name, "gpt-5.5")
+        XCTAssertEqual(snapshot.detail.week.tokens.input, 2000, "input is reported uncached")
+        XCTAssertEqual(snapshot.detail.week.tokens.cacheRead, 3000)
+        XCTAssertEqual(snapshot.detail.week.messages, 12)
+        XCTAssertEqual(snapshot.detail.byModel.first?.name, "gpt-5.5")
         XCTAssertEqual(snapshot.periodLabel, "month")
     }
 

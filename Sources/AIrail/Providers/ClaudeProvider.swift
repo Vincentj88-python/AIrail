@@ -177,15 +177,13 @@ enum ClaudeUsage {
         report: Report, credential: Credential, transcripts: TranscriptScanner.Summary?,
         providerId: String, displayName: String, now: Date = Date()
     ) -> UsageSnapshot {
-        var detail: UsageDetail?
+        var detail = UsageDetail()
         if let transcripts {
             detail = UsageDetail(hours: transcripts.hours, days: transcripts.days, week: transcripts.week)
         }
         return UsageSnapshot(
             providerId: providerId,
             displayName: displayName,
-            sessionUsed: nil,
-            sessionLimit: nil,
             sessionPercent: report.sessionPercent.map(UsageSnapshot.clampPercent),
             weeklyUsed: nil,
             weeklyLimit: nil,
@@ -197,7 +195,6 @@ enum ClaudeUsage {
             plan: credential.plan,
             status: .ok,
             lastUpdated: now,
-            weeklyHistory: transcripts?.days.map { $0.usage.tokens.total } ?? [],
             weeklyResetsAt: report.weeklyResetsAt,
             detail: detail
         )

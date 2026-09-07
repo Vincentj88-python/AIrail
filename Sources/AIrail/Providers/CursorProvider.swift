@@ -143,7 +143,6 @@ enum CursorUsage {
         var apiMessage: String?
         var cycleEnd: Date?
         var plan: String?
-        var onDemandEnabled: Bool
     }
 
     /// One request from the dashboard's usage-events feed.
@@ -193,8 +192,7 @@ enum CursorUsage {
             autoMessage: json.string("autoModelSelectedDisplayMessage"),
             apiMessage: json.string("namedModelSelectedDisplayMessage"),
             cycleEnd: DateParsing.iso8601(json.string("billingCycleEnd")),
-            plan: planLabel(json.string("membershipType")),
-            onDemandEnabled: usage["onDemand"]?.bool("enabled") ?? false
+            plan: planLabel(json.string("membershipType"))
         )
     }
 
@@ -280,8 +278,6 @@ enum CursorUsage {
         UsageSnapshot(
             providerId: providerId,
             displayName: displayName,
-            sessionUsed: nil,
-            sessionLimit: nil,
             sessionPercent: nil,
             weeklyUsed: nil,
             weeklyLimit: nil,
@@ -293,7 +289,6 @@ enum CursorUsage {
             plan: report.plan ?? credential.plan,
             status: .ok,
             lastUpdated: now,
-            weeklyHistory: detail.days.map { $0.usage.tokens.total },
             periodLabel: "billing cycle",
             weeklyResetsAt: report.cycleEnd,
             account: credential.email,

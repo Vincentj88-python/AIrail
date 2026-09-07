@@ -34,7 +34,6 @@ actor TranscriptScanner {
         var hours: [UsageBucket]
         var days: [UsageBucket]
         var week: UsageAggregate
-        var newestEventDate: Date?
     }
 
     private struct FileState {
@@ -50,7 +49,6 @@ actor TranscriptScanner {
     private let extractor: Extractor
     private let calendar: Calendar
     private var files: [String: FileState] = [:]
-    private(set) var newestEventDate: Date?
 
     /// - Parameters:
     ///   - roots: directories searched recursively for `.jsonl` files.
@@ -90,8 +88,7 @@ actor TranscriptScanner {
         return Summary(
             hours: UsageBucketing.series(hours, count: hourCount, component: .hour, endingAt: now, calendar: calendar),
             days: UsageBucketing.series(days, count: dayCount, component: .day, endingAt: now, calendar: calendar),
-            week: week,
-            newestEventDate: newestEventDate
+            week: week
         )
     }
 
@@ -197,8 +194,5 @@ actor TranscriptScanner {
         let day = calendar.startOfDay(for: event.date)
         state.hours[hour, default: UsageAggregate()].merge(contribution)
         state.days[day, default: UsageAggregate()].merge(contribution)
-        if newestEventDate.map({ event.date > $0 }) ?? true {
-            newestEventDate = event.date
-        }
     }
 }

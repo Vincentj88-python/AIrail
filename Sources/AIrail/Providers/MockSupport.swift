@@ -76,8 +76,6 @@ final class MockUsageEngine {
         return UsageSnapshot(
             providerId: providerId,
             displayName: displayName,
-            sessionUsed: nil,
-            sessionLimit: nil,
             sessionPercent: sessionPercent,
             weeklyUsed: weeklyUsed,
             weeklyLimit: profile.weeklyLimit,
@@ -89,7 +87,6 @@ final class MockUsageEngine {
             plan: profile.plan,
             status: .demo,
             lastUpdated: Date(),
-            weeklyHistory: history,
             weeklyResetsAt: Self.nextMondayNine(),
             detail: demoDetail()
         )

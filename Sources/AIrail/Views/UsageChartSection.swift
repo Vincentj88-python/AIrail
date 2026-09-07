@@ -10,9 +10,7 @@ struct UsageChartSection: View {
         var label: String { self == .day ? "24 Hours" : "7 Days" }
     }
 
-    let detail: UsageDetail?
-    let fallbackHistory: [Double]
-    let fallbackDates: [Date]
+    let detail: UsageDetail
     let color: Color
     /// The provider's current rolling session window, when it has one.
     let sessionWindow: DateInterval?
@@ -24,10 +22,10 @@ struct UsageChartSection: View {
         ChartRange(rawValue: storedRange) ?? .day
     }
 
-    private var hours: [UsageBucket] { detail?.hours ?? [] }
-    private var days: [UsageBucket] { detail?.days ?? [] }
+    private var hours: [UsageBucket] { detail.hours }
+    private var days: [UsageBucket] { detail.days }
     private var hasHourly: Bool { !hours.isEmpty }
-    private var hasDaily: Bool { !days.isEmpty || fallbackHistory.count == 7 }
+    private var hasDaily: Bool { !days.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -111,16 +109,12 @@ struct UsageChartSection: View {
     // MARK: Daily
 
     private var dailyChart: some View {
-        let values = days.isEmpty ? fallbackHistory : days.map { $0.usage.tokens.total }
-        let dates = days.isEmpty ? fallbackDates : days.map(\.start)
-        return ZStack(alignment: .top) {
-            Sparkline(values: values, dates: dates, color: color, highlighted: hoverIndex)
+        ZStack(alignment: .top) {
+            Sparkline(values: days.map { $0.usage.tokens.total }, dates: days.map(\.start), color: color, highlighted: hoverIndex)
                 .overlay(alignment: .top) {
-                    hoverTracker(count: values.count).frame(height: 104)
+                    hoverTracker(count: days.count).frame(height: 104)
                 }
-            if !days.isEmpty {
-                callout(for: hoverIndex.flatMap { days.indices.contains($0) ? days[$0] : nil }, count: days.count, style: .day)
-            }
+            callout(for: hoverIndex.flatMap { days.indices.contains($0) ? days[$0] : nil }, count: days.count, style: .day)
         }
     }
 
