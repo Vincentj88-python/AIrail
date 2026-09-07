@@ -40,12 +40,13 @@ published release (https://github.com/Vincentj88-python/AIrail/releases/tag/v0.3
 the in-app update checker now answers for real. GitHub Sponsors is set up
 (Stripe Connect to a South African bank).
 
-**Left for Vincent, in order — the rest of the free soft launch:**
-2. `gh repo create Vincentj88-python/homebrew-airail --public`, copy
-   `dist/homebrew-airail/Casks/airail.rb` in, push; then
-   `brew install --cask vincentj88-python/airail/airail` works.
-3. GitHub Sponsors on the profile with a **$99 goal: "notarized builds"**
-   (FUNDING.yml is committed). South Africa is supported; 0 % fee.
+**Homebrew tap live (2026-09-07):** https://github.com/Vincentj88-python/homebrew-airail —
+`brew install --cask vincentj88-python/airail/airail` (audited, DMG hash
+verified). Each release: run `AIRAIL_TAP=<tap checkout> ./scripts/release.sh`,
+commit and push the rewritten cask after the GitHub release exists.
+
+**Left for Vincent — the rest of the free soft launch:**
+3. The **$99 goal: "notarized builds"** on the Sponsors dashboard.
 4. Announce on X and the Claude Code / Codex / Cursor communities; hold the
    Show HN and Product Hunt for the notarized release.
 
