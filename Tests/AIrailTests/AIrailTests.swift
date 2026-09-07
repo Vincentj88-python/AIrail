@@ -263,6 +263,11 @@ final class AIrailTests: XCTestCase {
         XCTAssertTrue(err.errorDescription?.contains("limiting how often") == true, err.errorDescription ?? "")
         XCTAssertEqual(UsageFormatting.clockString(Date().addingTimeInterval(5)), "shortly")
         XCTAssertTrue(UsageFormatting.clockString(soon).hasPrefix("at "))
+        XCTAssertTrue(ConnectionError.offline.isTransient, "offline keeps the last numbers")
+        XCTAssertTrue(ConnectionError.offline.isNetworkOutage)
+        XCTAssertTrue(ConnectionError.network("x").isNetworkOutage)
+        XCTAssertFalse(ConnectionError.expired(tool: "T").isNetworkOutage)
+        XCTAssertEqual(ConnectionError.offline.symbolName, "wifi.slash")
     }
 
     // MARK: Date parsing

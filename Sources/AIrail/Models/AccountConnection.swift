@@ -34,6 +34,8 @@ enum ConnectionError: LocalizedError, Sendable {
     case temporarilyUnavailable(tool: String)
     case unreadable(String)
     case network(String)
+    /// The Mac has no network path at all; nothing was tried.
+    case offline
     /// A request or redirect to a host that isn't on `HTTPClient.allowedHosts`
     /// — a bug in AIrail's own code paths, never something a retry fixes.
     case blockedHost(String)
@@ -62,6 +64,8 @@ enum ConnectionError: LocalizedError, Sendable {
             return "Couldn't read the local data: \(detail)"
         case .network(let detail):
             return "Couldn't reach the service: \(detail)"
+        case .offline:
+            return "You're offline. The last numbers stay until the network is back."
         case .blockedHost(let host):
             return "AIrail doesn't connect to \(host); it only talks to the services it lists."
         case .unsupported:
@@ -82,6 +86,7 @@ enum ConnectionError: LocalizedError, Sendable {
         case .temporarilyUnavailable: return "Reading sign-in — retrying"
         case .unreadable: return "Couldn't read local data"
         case .network: return "Couldn't reach service"
+        case .offline: return "Offline"
         case .blockedHost: return "Host not on AIrail's list"
         case .unsupported: return "Not supported yet"
         }
@@ -91,8 +96,22 @@ enum ConnectionError: LocalizedError, Sendable {
     /// we just couldn't refresh) as opposed to one that means the data is gone.
     var isTransient: Bool {
         switch self {
-        case .expired, .network, .accessDenied, .rateLimited, .temporarilyUnavailable: return true
+        case .expired, .network, .offline, .accessDenied, .rateLimited, .temporarilyUnavailable: return true
         case .notInstalled, .notSignedIn, .missingKey, .invalidKey, .unreadable, .blockedHost, .unsupported: return false
         }
+    }
+
+    /// A failure the network path explains: clear its backoff when the path returns.
+    var isNetworkOutage: Bool {
+        switch self {
+        case .offline, .network: return true
+        default: return false
+        }
+    }
+
+    /// The symbol beside the message: no Wi-Fi for offline, a warning otherwise.
+    var symbolName: String {
+        if case .offline = self { return "wifi.slash" }
+        return "exclamationmark.triangle"
     }
 }

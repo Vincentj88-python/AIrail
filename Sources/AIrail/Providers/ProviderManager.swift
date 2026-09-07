@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import Network
 import SwiftUI
 
 /// Value-type description of a provider, safe to hand to SwiftUI lists.
@@ -23,6 +24,9 @@ final class ProviderManager: ObservableObject {
     /// Why the latest read of a connected account failed, by provider id.
     @Published private(set) var lastErrors: [String: ConnectionError] = [:]
     @Published private(set) var refreshingIds: Set<String> = []
+    /// Whether the Mac has a network path. Without one, reads aren't tried:
+    /// every account keeps its last numbers as stale under an "offline" note.
+    @Published private(set) var isOnline = true
 
     private let settings: AppSettings
     private let notifier: UsageNotifier
@@ -43,6 +47,10 @@ final class ProviderManager: ObservableObject {
     /// Consecutive failures per provider, for exponential backoff.
     private var failureStreak: [String: Int] = [:]
     private var timer: Timer?
+    private var pathMonitor: NWPathMonitor?
+    private var wakeTask: Task<Void, Never>?
+    /// When the last back-online read ran, so a flapping path reads once.
+    private var lastReconnectRefresh: Date?
     private var cancellables: Set<AnyCancellable> = []
 
     /// The app passes only `settings`; tests hand in scripted providers, a
@@ -208,6 +216,7 @@ final class ProviderManager: ObservableObject {
     func start() {
         Task { await refreshAll() }
         restartTimer(interval: settings.refreshInterval)
+        watchNetworkAndSleep()
     }
 
     /// Quitting: the timer stops, and any reset alert handed to the system
@@ -215,7 +224,94 @@ final class ProviderManager: ObservableObject {
     func stop() {
         timer?.invalidate()
         timer = nil
+        wakeTask?.cancel()
+        pathMonitor?.cancel()
+        pathMonitor = nil
         notifier.withdrawResets(for: providers.map(\.id))
+    }
+
+    // MARK: Network and sleep
+
+    /// The network path and the Mac's sleep state, observed only from
+    /// `start()` so tests drive the same entry points by hand. The path
+    /// monitor is local kernel state; nothing leaves the Mac to ask it.
+    private func watchNetworkAndSleep() {
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            let online = path.status == .satisfied
+            Task { @MainActor [weak self] in self?.networkDidChange(online: online) }
+        }
+        monitor.start(queue: DispatchQueue(label: "com.codeandvin.airail.network"))
+        pathMonitor = monitor
+
+        let workspace = NSWorkspace.shared.notificationCenter
+        workspace.publisher(for: NSWorkspace.willSleepNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.willSleep() }
+            .store(in: &cancellables)
+        workspace.publisher(for: NSWorkspace.didWakeNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                // didWake arrives before Wi-Fi has re-associated; give it a moment.
+                wakeTask?.cancel()
+                wakeTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(2))
+                    guard !Task.isCancelled else { return }
+                    await self?.didWake()
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    /// Sleep: the timer stops, so nothing fires into a network that is going
+    /// away (an overdue timer firing at wake was the source of the wake-time
+    /// failure and its one-minute backoff).
+    func willSleep() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    /// Wake: the timer restarts and one read runs, if there is a path to run it on.
+    func didWake() async {
+        restartTimer(interval: settings.refreshInterval)
+        if isOnline { await refreshAll() }
+    }
+
+    /// Offline: every connected account keeps its last numbers as stale under
+    /// an "offline" note, with no backoff, since nothing was tried. Back
+    /// online: the backoffs earned by the outage are cleared and one read
+    /// runs; a path that flaps inside ten seconds reinstates the read from
+    /// moments ago instead of reading again.
+    func networkDidChange(online: Bool) {
+        guard online != isOnline else { return }
+        isOnline = online
+        let ids = connectedProviderInfos.map(\.id)
+        guard online else {
+            for id in ids { markOffline(id) }
+            return
+        }
+        let now = clock()
+        let recentlyRefreshed = lastReconnectRefresh.map { now.timeIntervalSince($0) < 10 } ?? false
+        for id in ids {
+            guard let error = lastErrors[id], error.isNetworkOutage else { continue }
+            backoffUntil[id] = nil
+            failureStreak[id] = nil
+            if recentlyRefreshed, case .offline = error, let live = lastLive[id] {
+                lastErrors[id] = nil
+                snapshots[id] = live
+            }
+        }
+        guard !recentlyRefreshed else { return }
+        lastReconnectRefresh = now
+        Task { await refreshAll() }
+    }
+
+    private func markOffline(_ providerId: String) {
+        lastErrors[providerId] = .offline
+        if let previous = lastLive[providerId] {
+            snapshots[providerId] = expiring(previous.marking(.stale), for: providerId)
+        }
     }
 
     /// Every connected account (or the demo set while nothing is connected)
@@ -241,6 +337,10 @@ final class ProviderManager: ObservableObject {
         }
         guard let provider = provider(for: providerId) else { return }
         if settings.isConnected(providerId) {
+            guard isOnline || force else {
+                markOffline(providerId) // nothing to try; the Refresh button may still insist
+                return
+            }
             if !force, let until = backoffUntil[providerId], until > clock() {
                 // Still cooling down: the last snapshot stays, minus any
                 // window that has reset in the meantime.
@@ -382,6 +482,7 @@ final class ProviderManager: ObservableObject {
                 await self?.refreshAll()
             }
         }
+        timer.tolerance = max(5, interval * 0.1) // lets the system coalesce wake-ups
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }

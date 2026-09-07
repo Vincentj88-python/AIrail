@@ -107,7 +107,7 @@ Five ordered blocks; each lands before the next touches the same files. v0.2.1 =
   - How: ClaudeUsage.keychainServices(configDir:) returns the legacy name plus 'Claude Code-credentials-' + first 8 hex of CryptoKit SHA256 over the NFC path (~/.claude, plus the env var when present). KeychainReader.genericPassword(services:tool:) probes attributes-only (no prompt), reads data from the most recently modified candidate, throws .notSignedIn only when all are missing. ClaudeProvider remembers the winning name; one test; one caveat sentence.
   - Why here: Block B: table-stakes robustness, and work-personal-accounts (tier 2) reuses keychainServices verbatim.
 
-- [ ] **Sleep, wake and offline awareness** · 1 day · wow 2/5 · `sleep-wake-offline-awareness`
+- [x] **Sleep, wake and offline awareness** · 1 day · wow 2/5 · `sleep-wake-offline-awareness`
   'Offline' over the last real numbers, no polling while asleep, one refresh on return.
   - How: ProviderManager: NWPathMonitor hopping a Bool into `isOnline`; NSWorkspace willSleep invalidates the timer, didWake restarts it after ~2 s and runs refreshAll if online. When offline, skip the fetch, mark lastLive .stale with lastErrors = .offline, leave backoff untouched; on reconnect clear backoff for .offline/.network and refresh once (10 s dedup). ConnectionError.offline ('You're offline…'), rendered as a wifi.slash Label. timer.tolerance = max(5, interval*0.1); JSON-parse failure of an HTTP body becomes transient .network.
   - Why here: Block B: the wake-time .network failure and 1-minute backoff are a real defect today. The session config lives in one-network-path's static session; no pause on screen lock (that is when the 90% alert matters).

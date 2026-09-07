@@ -183,6 +183,11 @@ enum HTTPClient {
     private static func unwrap(_ response: Response, tool: String) throws -> Data {
         switch response.status {
         case 200..<300:
+            // A 2xx that isn't JSON is a captive portal or an edge page, not
+            // the service: a retry fixes it, so it must not blank the account.
+            guard (try? JSONSerialization.jsonObject(with: response.data)) != nil else {
+                throw ConnectionError.network("unexpected response")
+            }
             return response.data
         case 401, 403:
             throw ConnectionError.expired(tool: tool)

@@ -71,6 +71,30 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Sleep, wake and offline awareness (2026-09-07)
+
+Block B. The `.common`-mode timer doesn't fire during sleep but an overdue
+repeating timer fires once at wake, before Wi-Fi has re-associated — that read
+failed with `.network` and earned a one-minute backoff every morning.
+`ProviderManager.start()` now watches an `NWPathMonitor` (local kernel path
+state; a Bool is hopped to the main actor, never the `NWPath`) and
+`NSWorkspace`'s will-sleep / did-wake notifications: sleep invalidates the
+timer; wake restarts it after a 2 s settle and runs one read if the path is
+up. Offline (`networkDidChange(online: false)`, or a timer tick while offline)
+marks every connected account's last live numbers stale under a new
+`ConnectionError.offline` ("You're offline. The last numbers stay until the
+network is back.", `wifi.slash` in the HUD notice) with no backoff, since
+nothing was tried; the Refresh button (`force`) still insists. Back online
+clears the backoffs earned by `.offline`/`.network` and reads once; a path
+that flaps inside ten seconds reinstates the read from moments ago instead of
+reading again. `timer.tolerance` = max(5 s, 10 %) so the system can coalesce
+wake-ups. A 2xx whose body isn't JSON (captive portal, edge page) is now a
+transient `.network("unexpected response")` in `HTTPClient.unwrap` rather
+than an `.unreadable` that blanked the account. Captive portals still report
+a satisfied path, so the normal error path stays as the backstop. Cut on
+product grounds: screen-lock detection (undocumented notifications) and a
+pause on screen sleep (that's when the 90 % alert matters). 79 green (+2).
+
 ## Hashed Claude Keychain name (2026-09-07)
 
 Block B. Claude Code names its Keychain item "Claude Code-credentials" by

@@ -215,6 +215,60 @@ final class ProviderManagerTests: XCTestCase {
         XCTAssertNil(manager.snapshots["claude"]?.sessionPercent, "expiry survives a re-mark from the last live read")
     }
 
+    // MARK: Network and sleep
+
+    @MainActor
+    func testOfflineKeepsTheLastNumbersAndReconnectReadsOnce() async throws {
+        let clock = TestClock()
+        let fake = FakeProvider(id: "claude", results: [.success(Self.snapshot("claude", percent: 42))])
+        let (manager, settings) = try makeManager([fake], clock: clock)
+        settings.connect("claude")
+        await manager.refresh("claude")
+        XCTAssertEqual(fake.reads, 1)
+
+        manager.networkDidChange(online: false)
+        XCTAssertFalse(manager.isOnline)
+        XCTAssertEqual(manager.snapshots["claude"]?.status, .stale)
+        XCTAssertEqual(manager.snapshots["claude"]?.sessionPercent, 42, "nothing was tried, so the numbers stay")
+        XCTAssertEqual(manager.lastErrors["claude"]?.shortDescription, "Offline")
+        await manager.refresh("claude")
+        XCTAssertEqual(fake.reads, 1, "no read is attempted without a network path")
+        await manager.refresh("claude", force: true)
+        XCTAssertEqual(fake.reads, 2, "the Refresh button still insists")
+
+        manager.networkDidChange(online: true)
+        await eventually("the back-online read") { fake.reads == 3 }
+        XCTAssertEqual(manager.snapshots["claude"]?.status, .ok)
+        XCTAssertNil(manager.lastErrors["claude"])
+
+        manager.networkDidChange(online: false)
+        XCTAssertEqual(manager.snapshots["claude"]?.status, .stale)
+        manager.networkDidChange(online: true)
+        await Task.yield()
+        XCTAssertEqual(fake.reads, 3, "a path that flaps inside ten seconds doesn't read again")
+        XCTAssertEqual(manager.snapshots["claude"]?.status, .ok, "the read from moments ago is reinstated")
+        XCTAssertNil(manager.lastErrors["claude"])
+
+        clock.advance(by: 11)
+        manager.networkDidChange(online: false)
+        manager.networkDidChange(online: true)
+        await eventually("the next back-online read") { fake.reads == 4 }
+    }
+
+    @MainActor
+    func testWakeReadsOnceWhenOnline() async throws {
+        let fake = FakeProvider(id: "claude", results: [.success(Self.snapshot("claude", percent: 42))])
+        let (manager, settings) = try makeManager([fake])
+        settings.connect("claude")
+        manager.willSleep()
+        await manager.didWake()
+        XCTAssertEqual(fake.reads, 1)
+        manager.networkDidChange(online: false)
+        await manager.didWake()
+        XCTAssertEqual(fake.reads, 1, "waking offline waits for the path instead of failing into a backoff")
+        XCTAssertEqual(manager.snapshots["claude"]?.status, .stale)
+    }
+
     // MARK: Membership
 
     @MainActor

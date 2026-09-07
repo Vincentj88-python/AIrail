@@ -157,7 +157,7 @@ struct OverlayView: View {
             guard let error = manager.lastErrors[info.id] else { return nil }
             return AnyView(
                 VStack(alignment: .leading, spacing: 4) {
-                    Label(error.errorDescription ?? error.shortDescription, systemImage: "exclamationmark.triangle")
+                    Label(error.errorDescription ?? error.shortDescription, systemImage: error.symbolName)
                         .foregroundStyle(snapshot.status.tint)
                     if let reset = snapshot.expiredResetAt {
                         // The numbers for that window are gone from the card;
