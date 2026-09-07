@@ -913,6 +913,61 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(UsageSeverity.of(100), .critical)
     }
 
+    /// The collapsed surfaces show one reading: the account nearest its limit
+    /// (by its peak window), the account with the most room, and the nearest
+    /// reset — with a "demo"/"stale" word when the reading is one of those.
+    func testHeadroomSummaryPicksTheNearestLimitAndTheRoom() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let us = Locale(identifier: "en_US")
+        func snapshot(_ id: String, session: Double?, weekly: Double?, status: UsageStatus = .ok) -> UsageSnapshot {
+            var s = UsageSnapshot.empty(providerId: id, displayName: id.capitalized, status: status)
+            s.sessionPercent = session
+            s.weeklyPercent = weekly
+            s.resetsAt = now.addingTimeInterval(2.5 * 3600)
+            s.weeklyResetsAt = now.addingTimeInterval(3 * 86400)
+            return s
+        }
+        let empty = HeadroomSummary.of([("claude", "Claude", nil)])
+        XCTAssertNil(empty.peak)
+        XCTAssertNil(empty.fill, "no figure: the whole line, calm")
+        XCTAssertEqual(empty.severity, .normal)
+        XCTAssertNil(empty.caption(now: now))
+        XCTAssertEqual(empty.spoken(now: now), "AIrail, no usage figures yet")
+
+        let summary = HeadroomSummary.of([
+            ("claude", "Claude", snapshot("claude", session: 91, weekly: 40)),
+            ("codex", "Codex", snapshot("codex", session: 12, weekly: 30)),
+            ("cursor", "Cursor", snapshot("cursor", session: nil, weekly: 75)),
+        ])
+        XCTAssertEqual(summary.peak?.id, "claude")
+        XCTAssertEqual(summary.fill ?? 0, 0.91, accuracy: 0.0001)
+        XCTAssertEqual(summary.severity, .critical)
+        XCTAssertEqual(summary.room?.id, "codex", "the lowest account under the warning line")
+        XCTAssertNil(summary.qualifier)
+        XCTAssertEqual(
+            summary.caption(now: now, locale: us).map { $0.replacingOccurrences(of: "\u{202F}", with: " ") },
+            "Claude 91% · Codex 30% · resets " + UsageFormatting.timeString(now.addingTimeInterval(2.5 * 3600), locale: us).replacingOccurrences(of: "\u{202F}", with: " "),
+            "the room account is judged by its own peak window too: Codex's week, not its quiet session"
+        )
+        XCTAssertTrue(summary.spoken(now: now).hasPrefix("Claude at 91 percent, nearest to its limit; Codex has room at 30 percent; resets "))
+
+        // A spent week outranks a quiet session, and its reset is the weekly one.
+        let weekly = HeadroomSummary.of([
+            ("claude", "Claude", snapshot("claude", session: 20, weekly: 96)),
+            ("codex", "Codex", snapshot("codex", session: 80, weekly: 50)),
+        ])
+        XCTAssertEqual(weekly.peak?.id, "claude")
+        XCTAssertEqual(weekly.peak?.resetsAt, now.addingTimeInterval(3 * 86400))
+        XCTAssertNil(weekly.room, "80% is not room")
+        XCTAssertTrue(weekly.caption(now: now, locale: us)?.hasSuffix(UsageFormatting.resetString(now.addingTimeInterval(3 * 86400), now: now, locale: us)) == true, "beyond a day the weekday is named")
+
+        let demo = HeadroomSummary.of([("claude", "Claude", snapshot("claude", session: 55, weekly: 10, status: .demo))])
+        XCTAssertEqual(demo.qualifier, "demo")
+        let stale = HeadroomSummary.of([("claude", "Claude", snapshot("claude", session: 55, weekly: 10, status: .stale))])
+        XCTAssertEqual(stale.qualifier, "stale")
+        XCTAssertTrue(stale.spoken(now: now).contains("(stale)"))
+    }
+
     /// At the wall the captions count down to the reset of the window that
     /// is spent — the later one if both are — and a limit with no reset date
     /// keeps its "100%".

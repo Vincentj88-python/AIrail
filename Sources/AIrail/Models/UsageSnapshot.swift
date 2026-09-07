@@ -94,6 +94,16 @@ extension UsageSnapshot {
         [sessionPercent, weeklyPercent].compactMap { $0 }.max().map(Self.clampPercent)
     }
 
+    /// When the window behind `peakPercent` resets.
+    var peakResetsAt: Date? {
+        let session = sessionPercent ?? -1
+        let weekly = weeklyPercent ?? -1
+        if weekly > session {
+            return weeklyResetsAt ?? (sessionPercent == nil ? resetsAt : nil)
+        }
+        return ringResetsAt
+    }
+
     /// When the wall lifts: the reset of a window that is spent (≥ 99.5%),
     /// the later one if both are. Nil while there is headroom, and for a
     /// limit with no reset date (a key's balance), which keeps its "100%".
@@ -226,6 +236,11 @@ enum UsageFormatting {
             return "limit reached, resets in " + countdown(to: wall, now: now)
         }
         return snapshot?.ringPercent.map { "\(Int($0.rounded())) percent used" } ?? "no data"
+    }
+
+    /// "2:30 PM" / "14:30" — a time today.
+    static func timeString(_ date: Date, locale: Locale = .autoupdatingCurrent) -> String {
+        date.formatted(Date.FormatStyle(locale: locale).hour().minute())
     }
 
     /// "Mon 9:00 AM" / "Mon 09:00" — a moment within the week.

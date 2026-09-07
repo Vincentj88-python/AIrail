@@ -91,25 +91,21 @@ struct RailView: View {
         )
     }
 
-    /// The nearest-to-limit account tints the collapsed hairline, so you get
-    /// peripheral warning without opening anything.
-    private var railAccent: Color {
-        let peak = manager.railProviderInfos
-            .compactMap { manager.snapshot(for: $0.id)?.peakPercent }
-            .max()
-        return UsageSeverity.of(peak).accent
-    }
-
     // MARK: Collapsed
 
+    /// The nearest-to-limit account tints the collapsed hairline and lights
+    /// it along its length, so you get peripheral warning without opening
+    /// anything: a short line is headroom, a full amber one is not.
     private var hairline: some View {
+        let headroom = manager.railHeadroom
         // A fixed height, centred — not tied to the window — so it never
         // stretches when the window resizes for the card; the card simply
         // grows over it as one motion.
-        RailHairline(reduceMotion: reduceMotion, accent: railAccent)
+        return RailHairline(reduceMotion: reduceMotion, accent: headroom.accent, fill: headroom.fill)
             .frame(width: 7, height: 150)
             .accessibilityElement()
             .accessibilityLabel("AIrail")
+            .accessibilityValue(headroom.spoken())
             .accessibilityHint("Move the pointer here to expand the usage rail.")
     }
 }

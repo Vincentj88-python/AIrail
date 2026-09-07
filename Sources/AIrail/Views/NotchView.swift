@@ -71,24 +71,19 @@ struct NotchView: View {
     /// transparent pixels pass clicks through — and the hairline sits just
     /// under it. Its own pixels are the hover target, as on the edge rail.
     private var hairline: some View {
-        VStack(spacing: 0) {
+        let headroom = manager.railHeadroom
+        return VStack(spacing: 0) {
             Color.clear
                 .frame(height: ui.notchSize.height)
-            RailHairline(reduceMotion: reduceMotion, axis: .horizontal, accent: railAccent)
+            RailHairline(reduceMotion: reduceMotion, axis: .horizontal, accent: headroom.accent, fill: headroom.fill)
             .frame(height: 7)
             .padding(.horizontal, 16)
             .padding(.top, 1)
         }
         .accessibilityElement()
         .accessibilityLabel("AIrail")
+        .accessibilityValue(headroom.spoken())
         .accessibilityHint("Move the pointer to the top centre of the display to expand the usage island.")
-    }
-
-    private var railAccent: Color {
-        let peak = manager.railProviderInfos
-            .compactMap { manager.snapshot(for: $0.id)?.peakPercent }
-            .max()
-        return UsageSeverity.of(peak).accent
     }
 
     // MARK: Expanded
@@ -133,14 +128,24 @@ struct NotchView: View {
     }
 
     /// Reveals the pointed-at (or open) provider's name and percent, the way
-    /// the Dynamic Island shows detail. A fixed-height row so the marks above
-    /// it never jump; it simply fades in.
+    /// the Dynamic Island shows detail — and, with nothing pointed at, the
+    /// headroom reading: nearest limit, the account with room, next reset. A
+    /// fixed-height row so the marks above it never jump; it simply fades in.
     private var caption: some View {
         let id = hoveredId ?? ui.selectedProviderId
         let info = id.flatMap { manager.providerInfo(for: $0) }
         let snapshot = id.flatMap { manager.snapshot(for: $0) }
+        let headroom = manager.railHeadroom
+        let idle = info == nil ? headroom.caption() : nil
         return HStack(spacing: 6) {
-            if let info {
+            if let idle {
+                Text(idle)
+                    .foregroundStyle(.white.opacity(0.8))
+                if let qualifier = headroom.qualifier {
+                    Text(qualifier)
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+            } else if let info {
                 Text(info.displayName)
                     .foregroundStyle(.white.opacity(0.9))
                 if let wall = snapshot?.atLimitResetsAt {
@@ -169,7 +174,7 @@ struct NotchView: View {
         .monospacedDigit()
         .lineLimit(1)
         .frame(height: 14)
-        .opacity(info == nil ? 0 : 1)
+        .opacity(info == nil && idle == nil ? 0 : 1)
         .animation(.easeOut(duration: 0.15), value: id)
         .accessibilityHidden(true)
     }

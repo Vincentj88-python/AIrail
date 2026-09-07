@@ -23,6 +23,80 @@ enum UsageSeverity: Sendable {
     }
 }
 
+/// The one reading the collapsed surfaces show, from the snapshots the rail
+/// already has: which account is nearest its limit and how near, which other
+/// account still has room, and when the nearest window resets. The hairline's
+/// colour and fill, the idle island caption and VoiceOver all read this.
+struct HeadroomSummary: Sendable, Equatable {
+    struct Account: Sendable, Equatable {
+        let id: String
+        let name: String
+        let percent: Double
+        let resetsAt: Date?
+        let status: UsageStatus
+    }
+
+    /// The account nearest its limit, judged by its peak window; nil when no
+    /// account has a figure at all (the line stays whole and calm).
+    let peak: Account?
+    /// The account with the most room, when one is comfortably under the
+    /// warning line — the one to switch to.
+    let room: Account?
+
+    var severity: UsageSeverity { .of(peak?.percent) }
+    var accent: Color { severity.accent }
+    /// How much of the hairline to light: the peak's share; nil for the whole line.
+    var fill: Double? { peak.map { $0.percent / 100 } }
+    /// "demo" or "stale" when the peak reading is one of those — a length is
+    /// a more precise claim than a colour, so it says what it is.
+    var qualifier: String? {
+        guard let peak, peak.status != .ok else { return nil }
+        return peak.status.label
+    }
+
+    static func of(_ accounts: [(id: String, name: String, snapshot: UsageSnapshot?)]) -> HeadroomSummary {
+        let readings = accounts.compactMap { account -> Account? in
+            guard let snapshot = account.snapshot, let percent = snapshot.peakPercent else { return nil }
+            return Account(id: account.id, name: account.name, percent: percent, resetsAt: snapshot.peakResetsAt, status: snapshot.status)
+        }
+        var peak: Account?
+        for reading in readings where peak.map({ reading.percent > $0.percent }) ?? true {
+            peak = reading // first in rail order wins a tie
+        }
+        var room: Account?
+        for reading in readings where reading.id != peak?.id && UsageSeverity.of(reading.percent) == .normal {
+            if room.map({ reading.percent < $0.percent }) ?? true { room = reading }
+        }
+        return HeadroomSummary(peak: peak, room: room)
+    }
+
+    /// "Claude 91% · Codex 12% · resets 2:30 PM" — at most two accounts and
+    /// the nearest reset; nil when there is nothing to say.
+    func caption(now: Date = Date(), locale: Locale = .autoupdatingCurrent) -> String? {
+        guard let peak else { return nil }
+        var parts = ["\(peak.name) \(Int(peak.percent.rounded()))%"]
+        if let room { parts.append("\(room.name) \(Int(room.percent.rounded()))%") }
+        if let resets = peak.resetsAt, resets > now {
+            parts.append(resets.timeIntervalSince(now) < 24 * 3600
+                         ? "resets \(UsageFormatting.timeString(resets, locale: locale))"
+                         : UsageFormatting.resetString(resets, now: now, locale: locale))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// What VoiceOver says for the collapsed hairline.
+    func spoken(now: Date = Date()) -> String {
+        guard let peak else { return "AIrail, no usage figures yet" }
+        var text = "\(peak.name) at \(Int(peak.percent.rounded())) percent, nearest to its limit"
+        if let qualifier { text += " (\(qualifier))" }
+        if let room { text += "; \(room.name) has room at \(Int(room.percent.rounded())) percent" }
+        if let resets = peak.resetsAt, resets > now {
+            text += "; " + UsageFormatting.resetString(resets, now: now)
+        }
+        return text
+    }
+}
+
 /// A projection of when a climbing usage figure will hit its limit, from the
 /// rate it's been climbing this session.
 struct UsageProjection: Sendable, Equatable {

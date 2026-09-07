@@ -155,6 +155,11 @@ final class ProviderManager: ObservableObject {
         allProviderInfos.filter { $0.kind == .apiKey && !settings.isConnected($0.id) }
     }
 
+    /// The reading the collapsed rail and island show: nearest limit, room, next reset.
+    var railHeadroom: HeadroomSummary {
+        HeadroomSummary.of(railProviderInfos.map { ($0.id, $0.displayName, snapshots[$0.id]) })
+    }
+
     func providerInfo(for id: String) -> ProviderInfo? {
         allProviderInfos.first { $0.id == id }
     }

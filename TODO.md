@@ -74,6 +74,26 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Ambient headroom: gauge and caption (2026-09-07)
+
+Block C. `HeadroomSummary` (UsageInsights) is the one reading the collapsed
+surfaces show, pure and tested: the account nearest its limit judged by its
+peak window (`UsageSnapshot.peakPercent`; ties go to rail order), the account
+with the most room (lowest peak under the 70 % warning line — judged by its
+peak too, a spent week is not room), the nearest reset (`peakResetsAt`, the
+window behind the peak), and a "demo"/"stale" qualifier because a length is a
+more precise claim than a colour. `ProviderManager.railHeadroom` replaces the
+two duplicated `railAccent` computeds. The hairline now **fills along its
+length** with the peak's share over a faint track (`RailHairline(fill:)`,
+eased 0.6 s in Core Animation; no figure = the whole line, calm, as before)
+and carries the summary as its VoiceOver value. The island's caption row,
+blank until now unless a mark was pointed at, shows "Claude 91% · Codex 30% ·
+resets 2:30 PM" (weekday form beyond a day, `UsageFormatting.timeString` for
+today) with the qualifier in a dimmer weight; pointing at a mark keeps the
+per-mark caption. Visual QA still owed on the real notch, the drawn top
+anchor and both edge sides with Reduce Motion on and a light wallpaper (the
+track's 0.2 opacity in particular). 92 green (+1).
+
 ## Energy-honest hairline (2026-09-07)
 
 Block C. The research measured the shipped hairline at 4.7–4.9 % CPU idle:
