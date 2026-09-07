@@ -74,6 +74,32 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Energy-honest hairline (2026-09-07)
+
+Block C. The research measured the shipped hairline at 4.7–4.9 % CPU idle:
+not just twenty body re-evaluations a second, but a full Auto Layout pass on
+the panel per `TimelineView` tick (the NSHostingView is constraint-pinned;
+Apple forums 773682 / FB13810482). `RailHairline` is now an
+`NSViewRepresentable` over `HairlineView`, a layer-backed NSView with three
+`CAShapeLayer` capsules — a faint full-length track (only when a fill is
+given), a glow (shadow radius 4) and the line (0.5 pt white stroke) — whose
+breath is a `CABasicAnimation` on opacity (2.25 s each way, autoreversing,
+forever, ease-in-out; glow 0 → 0.3, line 0.55 → 0.85, the old curve) that
+the render server plays with no per-frame work in the process. It holds
+still (glow 0.255, line 0.805) under Reduce Motion, Low Power Mode or thermal
+state ≥ serious (both ProcessInfo notifications observed on the main queue),
+and pauses while the window's occlusion state lacks `.visible` or after
+`screensDidSleep`, resuming on wake / `viewDidMoveToWindow`. Same call sites
+and signature, plus a `fill: Double?` (0…1 lit from the bottom on an edge,
+the leading end under the notch; nil = whole line, no track) that eases over
+0.6 s — ambient headroom's gauge, wired in the next item. Registrations live
+in a small `@unchecked Sendable` box with its own deinit, since a main-actor
+view's deinit can't touch its state in Swift 6. **Acceptance still owed by
+hand:** `top -stats pid,command,cpu,power -pid <pid>` on the idle collapsed
+rail should read ≤ 0.3 % (was 4.8), and a `sample` should show no
+`layoutIfNeeded` frames; record the numbers here. 91 green (no unit test
+can exercise Core Animation).
+
 ## Simplify: no drawn pill — Notch and Island become Top (2026-09-07)
 
 Block C, first item, with decision 3 (merge). `RailPosition` is `left, right,
