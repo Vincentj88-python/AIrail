@@ -1188,7 +1188,7 @@ card/island spring is seen. Kept the Dock-magnify-on-hover.
   `AIRAIL_SIGN_IDENTITY` to the Developer ID, add `--options runtime` to the
   build in release.sh, add a `notarytool submit --wait && xcrun stapler staple`
   step after the DMG, then make the repo public and publish the release.
-  Optional: a Homebrew tap (`brew install --cask vincentj88/airail/airail`)
+  Optional: a Homebrew tap (`brew install --cask vincentj88-python/airail/airail`)
   pointing at the release DMG, and Sparkle auto-updates via a GitHub Pages
   appcast.
 
