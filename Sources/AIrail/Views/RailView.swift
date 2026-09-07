@@ -64,21 +64,7 @@ struct RailView: View {
             }
         }
         .contextMenu {
-            Button("Settings…") {
-                NSApp.activate(ignoringOtherApps: true)
-                openSettings()
-            }
-            Button(UpdateChecker.menuTitle(for: ui.availableUpdate)) {
-                if let release = ui.availableUpdate {
-                    UpdateChecker.show(release)
-                } else {
-                    UpdateChecker.checkForUpdates()
-                }
-            }
-            Divider()
-            Button("Quit AIrail") {
-                NSApp.terminate(nil)
-            }
+            AIrailMenuItems(settings: settings, manager: manager, ui: ui)
         }
     }
 

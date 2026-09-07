@@ -57,7 +57,7 @@ final class OverlayWindowController {
         panel.appearance = NSAppearance(named: .darkAqua)
         panel.onEscape = { [weak self] in self?.close() }
 
-        let host = NSHostingView(rootView: OverlayView(manager: manager, ui: ui))
+        let host = NSHostingView(rootView: OverlayView(settings: settings, manager: manager, ui: ui))
         panel.contentView = host
     }
 

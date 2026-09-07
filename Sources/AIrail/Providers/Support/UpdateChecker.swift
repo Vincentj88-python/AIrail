@@ -112,6 +112,7 @@ enum UpdateChecker {
             return
         }
         let newer = release.flatMap { isNewer($0.version, than: currentVersion) ? $0 : nil }
+        Log.update.info("checked: running \(currentVersion, privacy: .public), latest \(release?.version ?? "none", privacy: .public)")
         report?(newer)
         if let newer {
             await presentUpdate(newer, userInitiated: userInitiated)

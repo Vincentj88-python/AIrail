@@ -31,8 +31,10 @@ enum KeychainReader {
                 throw ConnectionError.notSignedIn(tool: tool)
             case errSecAuthFailed, errSecUserCanceled, errSecInteractionNotAllowed:
                 // Prompt-related: don't hammer the dialog, let the caller retry later.
+                Log.keychain.notice("\(tool, privacy: .public): access not allowed (\(status, privacy: .public))")
                 throw ConnectionError.accessDenied(tool: tool)
             default:
+                Log.keychain.notice("\(tool, privacy: .public): status \(status, privacy: .public), retrying")
                 lastStatus = status // transient decode / busy — retry
             }
             if attempt < 2 { Thread.sleep(forTimeInterval: 0.15) }

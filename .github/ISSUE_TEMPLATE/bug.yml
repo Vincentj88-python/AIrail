@@ -1,0 +1,22 @@
+name: Bug report
+description: Something on the rail, the island or the card is wrong.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, what you expected, and what you were doing. A screenshot helps.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Prefilled by AIrail's "Report a Problem…" (build, macOS, placement, displays, account states — no emails, keys or project names). Attach the file from "Save Diagnostics…" if there is more.
+      render: text
+  - type: input
+    id: tools
+    attributes:
+      label: Tools and plans
+      placeholder: "Claude Code (Max), Codex (Plus), Cursor (Pro)…"

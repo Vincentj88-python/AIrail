@@ -74,6 +74,30 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## About panel and diagnostics (2026-09-07)
+
+Block E. The Settings / update / Quit menu was copied three times (rail
+right-click, island right-click, card ⋯); `Views/AIrailMenuItems.swift` is
+now the one menu, and it grew **About AIrail** (the standard panel via
+`orderFrontStandardAboutPanel`, version + commit from `BuildInfo.label`, a
+one-line credit and the repo link), **Report a Problem…** (a Feedback
+Assistant-style `NSAlert` with the redacted summary in a selectable text
+view and "Open GitHub Issue" / "Save Diagnostics…" buttons) and **Save
+Diagnostics…** (an `NSSavePanel`; the file is the summary, this launch's log
+entries from `OSLogStore(.currentProcessIdentifier)`, and the newest
+AIrail-*.ips crash report, all through `Diagnostics.redact`). `Log`
+(Providers/Support/Log.swift) is `os.Logger` per area — refresh, network,
+window, keychain, update — under the bundle id; interpolations are private
+unless marked, and the lines added mark only provider ids, hosts, status
+codes, versions and counts public (never headers, bodies, keys or who is
+signed in). `ProviderManager.accountDiagnostics` gives one line per
+connected account: state, age of its numbers, ring percent, error, backoff.
+`Diagnostics.redact` folds the home folder to "~", emails to `<email>`, and
+token-shaped runs to `<redacted>` (tested). `.github/ISSUE_TEMPLATE/bug.yml`
+has the `diagnostics` textarea the issue URL prefills by id; the Open Issue
+link only works for others once the repo is public. Nothing is ever sent by
+itself. `OverlayView` now takes `settings` (for the shared menu). 97 green (+2).
+
 ## Endpoint drift detection (2026-09-07)
 
 Block E, first of the items that need no Developer ID. A reply that parses

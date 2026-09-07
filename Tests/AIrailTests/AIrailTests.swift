@@ -1326,6 +1326,29 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(JSONObject([:]).keyNames, "keys: none")
     }
 
+    /// What Report a Problem and Save Diagnostics hand over never carries a
+    /// home path, an email or anything shaped like a token.
+    func testDiagnosticsRedaction() {
+        let home = "/Users/vincent"
+        let text = """
+        Transcript root: /Users/vincent/.claude/projects, also /Users/vincent/Desktop
+        Signed in as vincent@example.com and ops.team+ai@sub.example.org
+        Authorization: Bearer sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnop
+        token gho_1234567890abcdefghijklmnopqrstuvwxyz
+        claude: live, read 2m ago, 42%
+        """
+        let redacted = Diagnostics.redact(text, home: home)
+        XCTAssertFalse(redacted.contains(home))
+        XCTAssertFalse(redacted.contains("@"))
+        XCTAssertFalse(redacted.contains("sk-ant"))
+        XCTAssertFalse(redacted.contains("gho_"))
+        XCTAssertTrue(redacted.contains("~/.claude/projects"))
+        XCTAssertTrue(redacted.contains("<email>"))
+        XCTAssertTrue(redacted.contains("<redacted>"))
+        XCTAssertTrue(redacted.contains("claude: live, read 2m ago, 42%"), "the useful lines survive")
+        XCTAssertEqual(Diagnostics.issueURL(summary: "a b").query?.contains("template=bug.yml"), true)
+    }
+
     /// The fixture tooling: a document's key paths, and a redacted copy that
     /// keeps the shape and the plan/model/date strings but nothing personal.
     func testJSONShapePathsAndRedaction() throws {

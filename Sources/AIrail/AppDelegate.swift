@@ -148,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let wantsNotch = resolveNotch() != nil
         if wantsNotch != usingNotch {
             uiState.isExpanded = false
+            Log.window.info("placement: \(wantsNotch ? "top" : "edge", privacy: .public), \(NSScreen.screens.count, privacy: .public) display(s)")
         }
         usingNotch = wantsNotch
         overlayController?.anchorsBelow = wantsNotch

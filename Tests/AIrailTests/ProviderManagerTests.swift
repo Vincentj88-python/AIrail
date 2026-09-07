@@ -370,6 +370,26 @@ final class ProviderManagerTests: XCTestCase {
         XCTAssertEqual(nudges, ["cursor"], "one quiet update check per account per launch")
     }
 
+    @MainActor
+    func testAccountDiagnosticsNameStatesNotPeople() async throws {
+        let clock = TestClock()
+        var live = Self.snapshot("claude", percent: 42)
+        live.account = "vincent@example.com"
+        live.lastUpdated = clock.now
+        let fake = FakeProvider(id: "claude", results: [.success(live), .failure(.network("offline"))])
+        let (manager, settings) = try makeManager([fake], clock: clock)
+        XCTAssertTrue(manager.accountDiagnostics(now: clock.now).isEmpty)
+        settings.connect("claude")
+        await manager.refresh("claude")
+        XCTAssertEqual(manager.accountDiagnostics(now: clock.now), ["claude: live, read just now, 42%"])
+        clock.advance(by: 120)
+        await manager.refresh("claude", force: true)
+        let lines = manager.accountDiagnostics(now: clock.now)
+        XCTAssertEqual(lines.count, 1)
+        XCTAssertTrue(lines[0].hasPrefix("claude: stale, read 2m ago, 42%, error: Couldn't reach service, backing off "), lines[0])
+        XCTAssertFalse(lines.joined().contains("@"), "never who is signed in")
+    }
+
     // MARK: Membership
 
     @MainActor

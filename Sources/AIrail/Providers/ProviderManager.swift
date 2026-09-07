@@ -159,6 +159,27 @@ final class ProviderManager: ObservableObject {
         allProviderInfos.filter { $0.kind == .apiKey && !settings.isConnected($0.id) }
     }
 
+    /// One line per connected account for a bug report: its state, how old
+    /// its numbers are, what went wrong, and whether it is backing off.
+    /// Never who is signed in.
+    func accountDiagnostics(now: Date = Date()) -> [String] {
+        connectedProviderInfos.map { info in
+            let id = info.id
+            var parts: [String] = []
+            if let snapshot = snapshots[id] {
+                parts.append(snapshot.status.label)
+                parts.append("read " + UsageFormatting.lastUpdatedString(snapshot.lastUpdated, now: now))
+                if let percent = snapshot.ringPercent { parts.append("\(Int(percent.rounded()))%") }
+            } else {
+                parts.append("not read yet")
+            }
+            if let error = lastErrors[id] { parts.append("error: " + error.shortDescription) }
+            if let until = backoffUntil[id], until > now { parts.append("backing off " + UsageFormatting.duration(hours: until.timeIntervalSince(now) / 3600)) }
+            if refreshingIds.contains(id) { parts.append("reading") }
+            return "\(id): " + parts.joined(separator: ", ")
+        }
+    }
+
     /// The reading the collapsed rail and island show: nearest limit, room, next reset.
     var railHeadroom: HeadroomSummary {
         HeadroomSummary.of(railProviderInfos.map { ($0.id, $0.displayName, snapshots[$0.id]) })
@@ -421,6 +442,7 @@ final class ProviderManager: ObservableObject {
         do {
             let snapshot = try await provider.fetchUsage()
             guard stillWanted(providerId) else { return }
+            Log.refresh.info("\(providerId, privacy: .public): read, \(snapshot.status.label, privacy: .public)")
             recordSample(snapshot)
             let published = recorded(snapshot)
             lastLive[providerId] = published
@@ -433,6 +455,7 @@ final class ProviderManager: ObservableObject {
         } catch {
             guard stillWanted(providerId) else { return }
             let failure = (error as? ConnectionError) ?? .unreadable(error.localizedDescription)
+            Log.refresh.notice("\(providerId, privacy: .public): \(failure.shortDescription, privacy: .public)")
             lastErrors[providerId] = failure
             applyBackoff(providerId, failure: failure)
             if failure.isShapeChange, shapeNudged.insert(providerId).inserted {

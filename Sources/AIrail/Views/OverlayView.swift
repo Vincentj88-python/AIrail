@@ -4,6 +4,7 @@ import SwiftUI
 /// renders/03-stats-overlay.png: header, session ring, weekly numbers,
 /// reset, sparkline, credits/spend footer.
 struct OverlayView: View {
+    @ObservedObject var settings: AppSettings
     @ObservedObject var manager: ProviderManager
     @ObservedObject var ui: RailUIState
 
@@ -94,21 +95,7 @@ struct OverlayView: View {
             }
             Spacer()
             Menu {
-                Button("Settings…") {
-                    NSApp.activate(ignoringOtherApps: true)
-                    openSettings()
-                }
-                Button(UpdateChecker.menuTitle(for: ui.availableUpdate)) {
-                    if let release = ui.availableUpdate {
-                        UpdateChecker.show(release)
-                    } else {
-                        UpdateChecker.checkForUpdates()
-                    }
-                }
-                Divider()
-                Button("Quit AIrail") {
-                    NSApp.terminate(nil)
-                }
+                AIrailMenuItems(settings: settings, manager: manager, ui: ui)
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 13, weight: .semibold))
