@@ -74,7 +74,7 @@ Five ordered blocks; each lands before the next touches the same files. v0.2.1 =
   - How: Log the three cuts in TODO.md. Add `SpendPeriod { month, billingCycle, lifetime, keyLimit }` and `spendPeriod` to UsageSnapshot; OpenRouterUsage reads usage_monthly for spend and derives the ring from (limit - limit_remaining)/limit; Cursor tags .billingCycle. OverlayView.footer switches the caption on spendPeriod ('SPEND (ALL TIME)' etc.). UsageFormatting.credits/dollars use .currency(code:).locale(locale) with en_US pinned in tests.
   - Why here: Block A: OpenRouter's lifetime usage currently sits under a 'SPEND (SEP)' caption, a live mislabel. Do the money formatting here once so locale-formatting and cost-by-model share it.
 
-- [ ] **Don't build: the demo face** · hours · wow 1/5 · `dont-build-demo-face`
+- [x] **Don't build: the demo face** · hours · wow 1/5 · `dont-build-demo-face`
   Cut the privacy-redaction mode; the collapsed surfaces already expose only names and percents, and redaction leaves live rings drawing.
   - How: No code. Strike 'demo face' from the tier-1 list and TODO; add no AppSettings key, menu item, .redacted or .privacySensitive. Record the finding that Shapes (rings, share bars, chart bars) ignore redaction, so a 'redacted' card looks broken, not private. If BY PROJECT names ever draw a complaint, the narrowest fix is one 'Show project names' toggle under General, added on demand.
   - Why here: Block A decision record. The companion capture-hiding switch is on the cut list too (sharingType .none is ignored on macOS 15.4+), so the presenter story rests on the surfaces themselves; presentation-aware mirroring in tier 3 is orphaned unless open question 2 reverses this.

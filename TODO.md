@@ -62,6 +62,42 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Don't build: the demo face (2026-09-06)
+
+- **Cut, for the record; no code.** No privacy-redaction mode: no
+  `AppSettings` key, no menu item, no `.redacted(reason: .privacy)`, no
+  `.privacySensitive()` (none exist in the tree today either; checked). The
+  collapsed surfaces already give a presenter what they want: the rail's marks
+  and the notch show which tools are connected and a percent, the hover
+  caption adds the plan name at most, and the plan pill, BY PROJECT names and
+  the value line sit on the card, which opens only on a click. The account
+  identity is in Settings › Accounts, not on any surface.
+- **Why redaction can't do it:** SwiftUI redaction affects `Text` and `Image`
+  only. The session ring (`OverlayView.sessionRing`, `Circle().trim`), the
+  rail marks (`LogoMark`, the same trim), the BY MODEL / BY PROJECT share bars
+  (`UsageChartSection.column`, `Capsule`) and the chart bars
+  (`RoundedRectangle`) are Shapes and keep drawing the real percentages, so a
+  "redacted" card is grey text blocks over live rings: it looks broken, not
+  private. And macOS has no system trigger for an app's own windows (the
+  system applies `.privacy` to WidgetKit content only), so it would have
+  needed its own toggle regardless.
+- **The companion switch is cut too.** `NSWindow.sharingType = .none` is
+  public AppKit, no entitlement or prompt, and it does hide a window from
+  ScreenCaptureKit and CGWindowList captures on macOS 14 through 15.3; from
+  15.4 ScreenCaptureKit composites the whole framebuffer and ignores it
+  (Apple DTS, forums thread 792152: "there are no public APIs for preventing
+  screen capture"; only legacy `CGWindowListCreateImage` callers still honour
+  it; `.readWrite` is deprecated in the 15 SDK). A labelled "hide from screen
+  sharing" switch would silently fail in Zoom, Meet and QuickTime on the macOS
+  most people run.
+- **If it ever comes back:** decision 2's pick is one names-only Bool (email,
+  plan, projects; rings stay real), which the tier-3 mirror-detection sliver
+  could flip on its own; the narrowest version, if BY PROJECT names alone
+  draw a complaint, is a single "Show project names" toggle under General.
+  Either is added on demand, not before.
+- **By hand, Vincent:** nothing. `ROADMAP.md` box ticked. 69 tests green,
+  unchanged; 5 live skipped.
+
 ## Don't build: caps, forecasts, idle flag; fix the spend footer (2026-09-06)
 
 - **Three cuts, for the record.** No AIrail-set soft caps: no cap is
