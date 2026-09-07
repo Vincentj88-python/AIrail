@@ -334,6 +334,14 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(withSpend.extraSpend, 12.34)
         XCTAssertEqual(withSpend.extraCap, 50)
 
+        let credential = ClaudeUsage.Credential(accessToken: "t", expiresAt: nil, plan: "Max")
+        let snapshot = ClaudeUsage.snapshot(
+            report: withSpend, credential: credential, transcripts: nil, providerId: "claude", displayName: "Claude"
+        )
+        XCTAssertEqual(snapshot.spend, 12.34)
+        XCTAssertEqual(snapshot.spendCap, 50)
+        XCTAssertEqual(snapshot.spendPeriod, .billingCycle, "extra usage runs with the billing month, not the calendar one")
+
         XCTAssertThrowsError(try ClaudeUsage.parse(Data(#"{"limits":[]}"#.utf8)))
     }
 

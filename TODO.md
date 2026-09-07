@@ -184,10 +184,14 @@ Things established that reverse or extend earlier notes:
   counted the limit) is gone, and only an unlimited key shows
   `usage_monthly` as `.month`. `usage` is optional now: an answer with
   neither figure leaves `spend` nil and the footer empty instead of a
-  fabricated $0.00 (principle 4; tested). `spendCaption(.month)` names the
-  UTC month — the formatter is pinned to UTC, since every `.month` producer
-  (OpenRouter's `usage_monthly`, both org cost reports) measures the UTC
-  month; tested at the 31 Aug / 1 Sep boundary so it holds in any zone.
+  fabricated $0.00 (principle 4; tested). Claude's extra usage now tags
+  `.billingCycle` — its `monthly_limit` runs with the subscription's billing
+  month, not the calendar one — so it reads `SPEND (THIS CYCLE)` like Cursor
+  instead of `SPEND (SEP)` (asserted in `testClaudeUsageParse`).
+  `spendCaption(.month)` names the UTC month — the formatter is pinned to
+  UTC, since every `.month` producer left (OpenRouter's `usage_monthly`,
+  both org cost reports) measures the UTC month; tested at the 31 Aug /
+  1 Sep boundary so it holds in any zone.
 - **By hand, Vincent:** nothing required. One live run with
   `TEST_RUNNER_AIRAIL_OPENROUTER_KEY` would confirm `usage_monthly` and
   `limit_reset` on a real key (the docs list both); a nicety, not a gate.
@@ -270,9 +274,13 @@ Things established that reverse or extend earlier notes:
   asked neither delivers nor remembers a threshold. `systemAuthorization`
   is true only for `.authorized` (and `.provisional`, never requested but
   honoured); `.notDetermined` is false rather than a prompt — a background
-  refresh must never raise the system dialog, and the General toggle is the
-  one caller of `requestAuthorization` (checked: `requestPermission` alone,
-  from the toggle's `onChange`). The remembered thresholds are keyed per
+  refresh must never raise the system dialog, and the General pane is the
+  one caller of `requestAuthorization` (checked: `requestPermission` alone —
+  from the toggle's `onChange`, and once per showing from the pane's status
+  read when the toggle is on but the answer is still `.notDetermined`: the
+  prompt was up when AIrail quit, or the permission was reset in System
+  Settings; without that the toggle would read on and stay silent for good).
+  The remembered thresholds are keyed per
   window now — `announcedThresholds` is `["<providerId>.<resetsAt unix
   seconds>" or "<providerId>.none": threshold]` instead of one slot per
   provider — so a ring that swaps between its session and weekly windows
@@ -375,10 +383,13 @@ Things established that reverse or extend earlier notes:
   info.kind == .tool)`. The signal is `ProviderInfo.kind` (`.tool` vs
   `.apiKey`), already on the view's input and exactly the subscription-tool /
   keyed-platform split; `spendPeriod` was the alternative and lost because
-  Claude's extra usage is tagged `.month` like the two org cost reports, and
-  `KeyedUsageProviding` would mean reaching back into the manager from the
-  view. Cursor is `.tool` too, but its week carries per-request cents, so
-  `week.cost == 0` keeps its line off whenever it has priced events.
+  it names a window, not a source (Claude's extra usage was `.month` like the
+  two org cost reports when this was decided and is `.billingCycle` since the
+  caps polish; either way a coincidence), and `KeyedUsageProviding` would
+  mean reaching back into the manager from the view. Cursor is `.tool` too,
+  but its week carries per-request cents, so `week.cost == 0` keeps its line
+  off whenever it has priced events.
+- **By hand, Vincent:** the prices are from memory as of 2026-09-06 and could
   not be checked against the vendors from here; check `ModelPricing.table`
   before cutting v0.3.0 (now a line in README › Releasing and the go-public
   checklist). The v0.2.0 install left `modelPricesCache`/`modelPricesCacheDate`

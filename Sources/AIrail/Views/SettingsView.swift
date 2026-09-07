@@ -31,6 +31,8 @@ private struct GeneralPane: View {
     @State private var launchAtLoginError: String?
     /// The toggle is on but macOS says no: point at the switch that matters.
     @State private var notificationsDenied = false
+    /// The pane asks at most once per showing (see `readNotificationStatus`).
+    @State private var askedForPermission = false
 
     var body: some View {
         Form {
@@ -95,7 +97,16 @@ private struct GeneralPane: View {
     }
 
     private func readNotificationStatus() async {
-        notificationsDenied = await UsageNotifier.systemStatus() == .denied
+        var status = await UsageNotifier.systemStatus()
+        // The toggle is on but macOS was never answered — the prompt was up
+        // when AIrail quit, or the permission was reset in System Settings.
+        // No background path may ask, so this pane does, once; otherwise the
+        // toggle would read on and stay silent for good.
+        if status == .notDetermined, settings.notificationsEnabled, !askedForPermission {
+            askedForPermission = true
+            status = await UsageNotifier.requestPermission()
+        }
+        notificationsDenied = status == .denied
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

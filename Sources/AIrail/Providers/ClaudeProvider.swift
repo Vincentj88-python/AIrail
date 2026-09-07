@@ -192,6 +192,8 @@ enum ClaudeUsage {
             credits: nil,
             spend: report.extraSpend,
             spendCap: report.extraCap,
+            // Extra usage runs with the subscription's billing month, not the calendar one.
+            spendPeriod: .billingCycle,
             plan: credential.plan,
             status: .ok,
             lastUpdated: now,
