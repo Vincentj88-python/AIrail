@@ -35,10 +35,12 @@ certificate (`scripts/make-dev-cert.sh` is ready; the current one lasts to
 2027-09-02 and a Developer ID would replace it anyway, so re-creating it
 now only buys a Keychain re-prompt) and the hairline CPU measurement.
 
-**Left for Vincent, in order — the free soft launch:**
-1. `gh repo edit --visibility public` (irreversible in spirit: it gets
-   indexed), then publish the draft release (`gh release edit v0.3.0
-   --draft=false`).
+**Public since 2026-09-07:** the repository is public and v0.3.0 is a
+published release (https://github.com/Vincentj88-python/AIrail/releases/tag/v0.3.0);
+the in-app update checker now answers for real. GitHub Sponsors is set up
+(Stripe Connect to a South African bank).
+
+**Left for Vincent, in order — the rest of the free soft launch:**
 2. `gh repo create Vincentj88-python/homebrew-airail --public`, copy
    `dist/homebrew-airail/Casks/airail.rb` in, push; then
    `brew install --cask vincentj88-python/airail/airail` works.
