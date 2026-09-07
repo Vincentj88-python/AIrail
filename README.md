@@ -4,11 +4,15 @@ A screen-edge rail for macOS that tracks usage of the AI coding tools you actual
 
 No menu-bar clutter. A barely-there hairline hugs the edge of your screen and fills along its length as your nearest limit fills; hover to expand it into a stack of provider marks with usage rings; click one for a glass card with the session ring, the week, reset times, pace, and a Screen Time-style chart.
 
-| Collapsed | Hover | The card |
-| --- | --- | --- |
-| ![Collapsed hairline](renders/01-collapsed-hairline.png) | ![Hover logos](renders/02-hover-logos.png) | ![The card](renders/03-stats-overlay.png) |
+| Collapsed | Hover |
+| --- | --- |
+| ![The hairline on the left edge, lit to the nearest limit](screenshots/01-collapsed-hairline.png) | ![The expanded rail: five marks with usage rings and captions](screenshots/02-expanded-rail.png) |
 
-*These three are design renders. Real captures, shot from a build with `scripts/screenshots.sh` and badged `demo`, replace them at the v0.3.0 release.*
+| The card | Top |
+| --- | --- |
+| ![The card for Cursor: session ring, week, pace, the Screen Time chart, cost by model and project](screenshots/03-card.png) | ![The island grown out of the notch, with the headroom caption](screenshots/04-island.png) |
+
+*Shot from a build by `scripts/screenshots.sh` on demo data, which is why every capture wears the `demo` badge.*
 
 ## Why the edge
 

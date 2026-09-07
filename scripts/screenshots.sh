@@ -31,32 +31,43 @@ if pgrep -xq "$SCHEME"; then
   sleep 1
 fi
 
-# The MacBook display's size in points, for the regions below.
-WIDTH=$(system_profiler SPDisplaysDataType 2>/dev/null | awk -F'[: x]+' '/Resolution/ {print $3; exit}')
-HEIGHT=$(system_profiler SPDisplaysDataType 2>/dev/null | awk -F'[: x]+' '/Resolution/ {print $4; exit}')
-WIDTH=${WIDTH:-1512}; HEIGHT=${HEIGHT:-982}
-# Retina reports pixels; the rail lives in points (half of that).
-if [ "$WIDTH" -gt 2000 ]; then WIDTH=$((WIDTH / 2)); HEIGHT=$((HEIGHT / 2)); fi
+# The built-in display: its index for screencapture, its name for the rail
+# setting, its size in points and its scale for the crop.
+DISPLAY_INFO="$(swift - <<'SWIFT' 2>/dev/null | grep '|' | head -1
+import AppKit
+for (index, screen) in NSScreen.screens.enumerated() {
+    let id = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
+    if CGDisplayIsBuiltin(id) != 0 {
+        print("\(index + 1)|\(screen.localizedName)|\(Int(screen.frame.width))|\(Int(screen.frame.height))|\(Int(screen.backingScaleFactor))")
+    }
+}
+SWIFT
+)"
+[ -n "$DISPLAY_INFO" ] || { echo "✗ no built-in display attached"; exit 1; }
+IFS='|' read -r DISPLAY_INDEX DISPLAY_NAME WIDTH HEIGHT SCALE <<< "$DISPLAY_INFO"
+echo "▸ Shooting on display $DISPLAY_INDEX ($DISPLAY_NAME, ${WIDTH}×${HEIGHT} @${SCALE}x)"
 MID_Y=$((HEIGHT / 2))
+SHOT="$BUILD_DIR/shot.png"
 
-shoot() { # name, region "x,y,w,h", launch args…
-  local name="$1"; local region="$2"; shift 2
+shoot() { # name  x y w h (points on the built-in display)  launch args…
+  local name="$1" x="$2" y="$3" w="$4" h="$5"; shift 5
   echo "▸ $name"
-  open -n "$APP" --args -connectedAccounts '()' "$@"
-  sleep 3
-  screencapture -x -R "$region" "$OUT/$name.png"
+  open -n "$APP" --args -connectedAccounts '()' -railDisplay "$DISPLAY_NAME" "$@"
+  sleep 4
+  screencapture -x -D "$DISPLAY_INDEX" "$SHOT"
+  sips --cropOffset $((y * SCALE)) $((x * SCALE)) --cropToHeightWidth $((h * SCALE)) $((w * SCALE)) "$SHOT" --out "$OUT/$name.png" >/dev/null
   osascript -e "quit app \"$SCHEME\"" || true
   sleep 1
 }
 
 # 1. Idle: the hairline on the left edge, mid-screen.
-shoot "01-collapsed-hairline" "0,$((MID_Y - 120)),200,240" -railPosition left
+shoot "01-collapsed-hairline" 0 $((MID_Y - 120)) 200 240 -railPosition left
 # 2. Hover: the expanded rail with marks and captions (--expanded opens it).
-shoot "02-expanded-rail" "0,$((MID_Y - 220)),260,440" -railPosition left --expanded
-# 3. The card: the HUD for Claude at a high demo percent (--demo raises the peak).
-shoot "03-card" "0,$((MID_Y - 380)),620,760" -railPosition left --expanded --overlay=claude --demo=91
-# 4. Top: the island grown out of the notch (or the top centre), with the headroom caption.
-shoot "04-island" "$((WIDTH / 2 - 260)),0,520,140" -railPosition top --expanded
+shoot "02-expanded-rail" 0 $((MID_Y - 270)) 260 540 -railPosition left --expanded
+# 3. The card: the HUD for the busiest demo account at a high figure (--demo raises it).
+shoot "03-card" 0 30 600 $((HEIGHT - 60)) -railPosition left --expanded --overlay=cursor --demo=91
+# 4. Top: the island grown out of the notch, with the headroom caption.
+shoot "04-island" $((WIDTH / 2 - 280)) 0 560 125 -railPosition top --expanded
 
 rm -rf "$BUILD_DIR"
 if [ -d /Applications/$SCHEME.app ]; then

@@ -71,17 +71,28 @@ struct HeadroomSummary: Sendable, Equatable {
     }
 
     /// "Claude 91% · Codex 12% · resets 2:30 PM" — at most two accounts and
-    /// the nearest reset; nil when there is nothing to say.
+    /// the nearest reset when it is within the day (the island's caption row
+    /// is one line wide, so a far reset is left to the card); nil when there
+    /// is nothing to say.
     func caption(now: Date = Date(), locale: Locale = .autoupdatingCurrent) -> String? {
-        guard let peak else { return nil }
-        var parts = ["\(peak.name) \(Int(peak.percent.rounded()))%"]
-        if let room { parts.append("\(room.name) \(Int(room.percent.rounded()))%") }
-        if let resets = peak.resetsAt, resets > now {
-            parts.append(resets.timeIntervalSince(now) < 24 * 3600
-                         ? "resets \(UsageFormatting.timeString(resets, locale: locale))"
-                         : UsageFormatting.resetString(resets, now: now, locale: locale))
+        captionVariants(now: now, locale: locale).first
+    }
+
+    /// The caption at three lengths, longest first — everything, then without
+    /// the account with room, then the nearest limit alone — so a narrow
+    /// island shows the longest one that fits rather than a truncated line.
+    func captionVariants(now: Date = Date(), locale: Locale = .autoupdatingCurrent) -> [String] {
+        guard let peak else { return [] }
+        let peakText = "\(peak.name) \(Int(peak.percent.rounded()))%"
+        let roomText = room.map { "\(room!.name) \(Int($0.percent.rounded()))%" }
+        var resetText: String?
+        if let resets = peak.resetsAt, resets > now, resets.timeIntervalSince(now) < 24 * 3600 {
+            resetText = "resets \(UsageFormatting.timeString(resets, locale: locale))"
         }
-        return parts.joined(separator: " · ")
+        var variants = [[peakText, roomText, resetText].compactMap { $0 }.joined(separator: " · ")]
+        if roomText != nil, let resetText { variants.append([peakText, resetText].joined(separator: " · ")) }
+        if roomText != nil || resetText != nil { variants.append(peakText) }
+        return variants
     }
 
     /// What VoiceOver says for the collapsed hairline.

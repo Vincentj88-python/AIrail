@@ -122,11 +122,16 @@ struct NotchView: View {
         let info = id.flatMap { manager.providerInfo(for: $0) }
         let snapshot = id.flatMap { manager.snapshot(for: $0) }
         let headroom = manager.railHeadroom
-        let idle = info == nil ? headroom.caption() : nil
+        let idle = info == nil ? headroom.captionVariants() : []
         return HStack(spacing: 6) {
-            if let idle {
-                Text(idle)
-                    .foregroundStyle(.white.opacity(0.8))
+            if !idle.isEmpty {
+                // The longest reading that fits the island's one caption row.
+                ViewThatFits(in: .horizontal) {
+                    Text(idle[0])
+                    if idle.count > 1 { Text(idle[1]) }
+                    if idle.count > 2 { Text(idle[2]) }
+                }
+                .foregroundStyle(.white.opacity(0.8))
                 if let qualifier = headroom.qualifier {
                     Text(qualifier)
                         .foregroundStyle(.white.opacity(0.45))
@@ -160,7 +165,7 @@ struct NotchView: View {
         .monospacedDigit()
         .lineLimit(1)
         .frame(height: 14)
-        .opacity(info == nil && idle == nil ? 0 : 1)
+        .opacity(info == nil && idle.isEmpty ? 0 : 1)
         .animation(.easeOut(duration: 0.15), value: id)
         .accessibilityHidden(true)
     }

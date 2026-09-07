@@ -989,7 +989,11 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(weekly.peak?.id, "claude")
         XCTAssertEqual(weekly.peak?.resetsAt, now.addingTimeInterval(3 * 86400))
         XCTAssertNil(weekly.room, "80% is not room")
-        XCTAssertTrue(weekly.caption(now: now, locale: us)?.hasSuffix(UsageFormatting.resetString(now.addingTimeInterval(3 * 86400), now: now, locale: us)) == true, "beyond a day the weekday is named")
+        XCTAssertEqual(weekly.caption(now: now, locale: us), "Claude 96%", "a reset days away is left to the card; the caption row is one line")
+        let variants = summary.captionVariants(now: now, locale: us)
+        XCTAssertEqual(variants.count, 3, "everything, then without the room, then the peak alone")
+        XCTAssertEqual(variants.last, "Claude 91%")
+        XCTAssertTrue(variants[1].hasPrefix("Claude 91% · resets "))
 
         let demo = HeadroomSummary.of([("claude", "Claude", snapshot("claude", session: 55, weekly: 10, status: .demo))])
         XCTAssertEqual(demo.qualifier, "demo")
