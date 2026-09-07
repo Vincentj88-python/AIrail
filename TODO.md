@@ -62,6 +62,51 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Don't build: recap card yet (2026-09-06)
+
+- **Deferred, for the record; no code.** No "Share This Week…" until three
+  things exist: an Apple Developer ID and a notarized, public release (a share
+  card for an app nobody can download is a poster for a rumour, and with no
+  verified identity behind the release there is nobody to answer a brand
+  complaint about four marks on AIrail-branded pixels); the block B usage
+  ledger, so the card covers a calendar week rather than the rolling 7-day
+  sum the transcripts give today; and the consolidated menu the entry point
+  hangs off. It is tier 2 `recap-card-redacted` in `ROADMAP.md`, the first
+  Pro-labelled candidate. The "Next up" nicety below is now that gate.
+- **Why not sooner:** the poster's headline would be the app's weakest number.
+  `ModelPricing.estimate` prices a whole week at each model's list rate with
+  guessed cache rates for unlisted ids; honest behind a `.help` tooltip that
+  says "est.", a bare claim once it is a PNG on social media (principle 4).
+  Screen Time, Battery and Activity Monitor have no share-as-image — Apple's
+  cards live in Fitness and Music Replay, not in the utility register
+  (principle 1). And a share pipeline is a second card view, a renderer, a
+  share sheet and light/dark variants: platform-shaped (principle 5).
+- **The `ImageRenderer` trap, so nobody pre-builds the wrong thing:**
+  `ImageRenderer` (macOS 13+, `.scale`, `.nsImage`) renders pure SwiftUI
+  only — text, images, shapes — and, per Apple's docs, draws a placeholder
+  for AppKit-backed views. The HUD has two: the header's `Menu`
+  (`OverlayView.header`, `.menuStyle(.button)`) and the chart's segmented
+  `Picker` (`UsageChartSection`). Its `.ultraThinMaterial` (`OverlayView`,
+  `GlassPanel`, `LogoMark`'s default disc) has nothing behind it offscreen,
+  so the glass comes out flat grey. So the sketch "extract a ProviderCardView
+  from `OverlayView.content` and render it" is wrong in practice. The card
+  must be its own value-typed, material-free, control-free view — a solid
+  paint, `LogoMark(onDark: true)` (already a solid disc), shapes and text —
+  rendered with `ImageRenderer(scale: 2, isOpaque: true)` to an `NSImage` and
+  offered through SwiftUI `ShareLink(item:preview:)` (macOS 13+), which
+  wraps `NSSharingServicePicker` for free. Never an extraction of
+  `OverlayView`. Nothing of the kind exists in the tree today (checked).
+- **Share-sheet notes for then:** the app is `.accessory` and the HUD a
+  `.nonactivatingPanel`, so in-process service sheets (Notes, Reminders) can
+  land behind other windows unless `NSApp.activate` runs first; and
+  `OverlayWindowController`'s global click monitor closes the HUD on any
+  click in another app, so a hop to Messages dismisses it mid-flow — the
+  entry point belongs in the consolidated menu, not on the card. The picker
+  itself asks for nothing; chosen services may (Add to Photos → Photos TCC).
+  To decide then: whether the API-equivalent estimate belongs on it at all.
+- **By hand, Vincent:** nothing. `ROADMAP.md` box ticked. 69 tests green,
+  unchanged; 5 live skipped.
+
 ## Don't build: the demo face (2026-09-06)
 
 - **Cut, for the record; no code.** No privacy-redaction mode: no
@@ -365,8 +410,13 @@ Things established that reverse or extend earlier notes:
 - [ ] Go-public checklist: Apple Developer ID → notarize → Sparkle → repo
       public → publish `v0.2.0` (or cut `v0.3.0`). Every release: check
       `ModelPricing.table` against the vendors' price pages.
-- [ ] Optional niceties floated but not built: a shareable "week in AI" recap
-      card; per-account history for Copilot (no local feed).
+- [ ] Optional nicety floated but not built: per-account history for Copilot
+      (no local feed; the block B usage ledger is the store it needs).
+- [ ] **Recap card ("Share This Week…") — gated.** Not before an Apple
+      Developer ID and a notarized, public release, the usage ledger (a
+      calendar week, not a rolling sum) and the consolidated menu. Tier 2
+      `recap-card-redacted` in `ROADMAP.md`; the `ImageRenderer` trap and the
+      share-sheet notes are under "Don't build: recap card yet" above.
 
 ## Decisions made (2026-09-02)
 

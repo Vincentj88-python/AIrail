@@ -79,7 +79,7 @@ Five ordered blocks; each lands before the next touches the same files. v0.2.1 =
   - How: No code. Strike 'demo face' from the tier-1 list and TODO; add no AppSettings key, menu item, .redacted or .privacySensitive. Record the finding that Shapes (rings, share bars, chart bars) ignore redaction, so a 'redacted' card looks broken, not private. If BY PROJECT names ever draw a complaint, the narrowest fix is one 'Show project names' toggle under General, added on demand.
   - Why here: Block A decision record. The companion capture-hiding switch is on the cut list too (sharingType .none is ignored on macOS 15.4+), so the presenter story rests on the surfaces themselves; presentation-aware mirroring in tier 3 is orphaned unless open question 2 reverses this.
 
-- [ ] **Don't build: recap card yet** · hours · wow 1/5 · `dont-build-recap-card-yet`
+- [x] **Don't build: recap card yet** · hours · wow 1/5 · `dont-build-recap-card-yet`
   No Share Week… before a notarized public release and a calendar-week history; note the ImageRenderer trap so nobody pre-builds the wrong thing.
   - How: Edit TODO.md: replace the 'shareable recap card' nicety with a gated note (Developer ID + notarized public release + the usage ledger). Record that ImageRenderer skips .ultraThinMaterial and AppKit-backed Menu/Picker, so the card must be its own value-typed, material-free view rendered at scale 2 and offered via ShareLink, never an extraction of OverlayView.
   - Why here: Block A decision record; the redacted recap card returns in tier 2 with exactly these prerequisites.
