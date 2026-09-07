@@ -71,6 +71,30 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Live countdowns and locale formatting (2026-09-07)
+
+Block B, first item. `UsageFormatting` now follows the user's locale the way
+System Settings does: `resetString` uses `Date.FormatStyle` (weekday + hour +
+minute within the week, day + month beyond), so a US Mac reads "resets Mon
+9:00 AM" and a British one "resets Mon 09:00"; `clockString` likewise;
+`currentMonthAbbreviation` keeps its UTC pin via `TimeZone.gmt`.
+`duration(hours:)` is `Duration.UnitsFormatStyle` in narrow width — "30m",
+"2h 24m", "3d" — so the burn-rate line, README and (later) Siri all say
+"2h 40m", never "2.4 h"; it floors at "1m". `ChartCallout` titles come from
+`Date.IntervalFormatStyle` ("Mon, 9:00 – 10:00 AM") and `.dateTime` ("Mon,
+Sep 1"); the 24-hour axis uses `.hour(.defaultDigits(amPM: .abbreviated))`
+("12 AM · 6 AM" or "00 · 06", exactly the Battery pane); `Sparkline` labels
+and the three `DateFormatter`s are gone. The HUD's reset lines under 24 h
+are `Text(date, style: .relative)` after "resets in", so they tick without a
+timer. The four percent Texts (ring, weekly, island caption, rail caption)
+roll with `.contentTransition(.numericText(value:))`; the island's carries
+`.id(info.id)` so switching providers doesn't roll one number into another.
+Every function takes `locale:` defaulting to `.autoupdatingCurrent`; tests pin
+en_US vs en_GB and strip Foundation's narrow no-break space before "AM".
+Note for this Mac: its locale is `en_US@rg=zazzzz` with a 24-hour cycle, so
+the old hard-coded "EEE HH:mm" never looked wrong here — a plain en_US Mac
+saw "resets Mon 14:00" beside a 12-hour clock in the same card.
+
 ## Don't build: recap card yet (2026-09-06)
 
 - **Deferred, for the record; no code.** No "Share This Week…" until three

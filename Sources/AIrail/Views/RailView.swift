@@ -180,6 +180,8 @@ private struct ExpandedRailContent: View {
                     .font(.system(size: 10.5, weight: .regular))
                     .foregroundStyle(.white.opacity(0.55))
                     .monospacedDigit()
+                    .contentTransition(.numericText(value: snapshot?.ringPercent ?? 0))
+                    .animation(.default, value: snapshot?.ringPercent)
             }
             .lineLimit(1)
         }

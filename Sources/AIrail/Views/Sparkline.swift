@@ -9,18 +9,6 @@ struct Sparkline: View {
     /// Index of the day under the pointer, drawn with a marker line and a bigger dot.
     var highlighted: Int? = nil
 
-    private static let dayNumberFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d"
-        return formatter
-    }()
-
-    private static let weekdayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE"
-        return formatter
-    }()
-
     var body: some View {
         VStack(spacing: 10) {
             GeometryReader { geo in
@@ -67,11 +55,11 @@ struct Sparkline: View {
             ForEach(dates.indices, id: \.self) { index in
                 let isToday = index == dates.count - 1
                 VStack(spacing: 2) {
-                    Text(Self.dayNumberFormatter.string(from: dates[index]))
+                    Text(dates[index].formatted(.dateTime.day()))
                         .font(.caption.weight(isToday ? .semibold : .regular))
                         .monospacedDigit()
                         .foregroundStyle(isToday ? color : .primary)
-                    Text(Self.weekdayFormatter.string(from: dates[index]))
+                    Text(dates[index].formatted(.dateTime.weekday(.abbreviated)))
                         .font(.caption2)
                         .foregroundStyle(isToday ? color.opacity(0.9) : .secondary)
                 }
@@ -131,7 +119,7 @@ struct Sparkline: View {
 
     private var accessibilitySummary: String {
         zip(dates, values)
-            .map { "\(Self.weekdayFormatter.string(from: $0)): \(Int($1))" }
+            .map { "\($0.formatted(.dateTime.weekday(.abbreviated))): \(Int($1))" }
             .joined(separator: ", ")
     }
 }

@@ -101,51 +101,31 @@ extension UsageSnapshot {
     }
 }
 
+/// Every string here follows the user's locale the way System Settings does:
+/// the 12/24-hour clock, the day-month order, the currency symbol, the unit
+/// words in a span. Callers pass a `locale` only in tests; the app reads
+/// `.autoupdatingCurrent`, so flipping 24-Hour Time re-renders the card.
 enum UsageFormatting {
-    private static let resetFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE HH:mm"
-        return formatter
-    }()
-
-    private static let resetDayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d MMM"
-        return formatter
-    }()
-
-    /// UTC-pinned: every `.month` spend is measured over the UTC month
-    /// (OpenRouter's `usage_monthly`, the two org cost reports), so the
-    /// caption must name that month, not the local one.
-    private static let monthFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM"
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        return formatter
-    }()
-
-    /// "resets Mon 09:00" within the week, "resets 1 Oct" further out.
-    static func resetString(_ date: Date, now: Date = Date()) -> String {
+    /// "resets Mon 9:00 AM" (or "Mon 09:00" on a 24-hour clock) within the
+    /// week, "resets Oct 1" (or "1 Oct") further out.
+    static func resetString(_ date: Date, now: Date = Date(), locale: Locale = .autoupdatingCurrent) -> String {
         if date.timeIntervalSince(now) < 6 * 24 * 3600 {
-            return "resets " + resetFormatter.string(from: date)
+            return "resets " + date.formatted(Date.FormatStyle(locale: locale).weekday(.abbreviated).hour().minute())
         }
-        return "resets " + resetDayFormatter.string(from: date)
+        return "resets " + date.formatted(Date.FormatStyle(locale: locale).day().month(.abbreviated))
     }
 
-    /// The UTC month `date` falls in, as "SEP".
-    static func currentMonthAbbreviation(_ date: Date = Date()) -> String {
-        monthFormatter.string(from: date).uppercased()
+    /// The UTC month `date` falls in, as "SEP": every `.month` spend is
+    /// measured over the UTC month (OpenRouter's `usage_monthly`, the two org
+    /// cost reports), so the caption names that month, not the local one.
+    static func currentMonthAbbreviation(_ date: Date = Date(), locale: Locale = .autoupdatingCurrent) -> String {
+        date.formatted(Date.FormatStyle(locale: locale, timeZone: .gmt).month(.abbreviated)).uppercased()
     }
 
-    private static let clockFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return formatter
-    }()
-
-    /// "at 14:32" for a time later today, "shortly" if it's basically now.
-    static func clockString(_ date: Date, now: Date = Date()) -> String {
-        date.timeIntervalSince(now) < 30 ? "shortly" : "at " + clockFormatter.string(from: date)
+    /// "at 2:32 PM" (or "at 14:32") for a time later today, "shortly" if
+    /// it's basically now.
+    static func clockString(_ date: Date, now: Date = Date(), locale: Locale = .autoupdatingCurrent) -> String {
+        date.timeIntervalSince(now) < 30 ? "shortly" : "at " + date.formatted(Date.FormatStyle(locale: locale).hour().minute())
     }
 
     static func lastUpdatedString(_ date: Date, now: Date = Date()) -> String {

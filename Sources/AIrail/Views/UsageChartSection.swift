@@ -96,11 +96,15 @@ struct UsageChartSection: View {
     private var hourLabels: some View {
         HStack(spacing: 0) {
             ForEach(hours.indices, id: \.self) { index in
+                // Every sixth hour, written the way the Battery pane's axis is:
+                // "12 AM · 6 AM · 12 PM" on a 12-hour clock, "00 · 06 · 12" on a 24-hour one.
                 let hour = Calendar.current.component(.hour, from: hours[index].start)
-                Text(hour % 6 == 0 ? String(format: "%02d", hour) : "")
+                Text(hour % 6 == 0 ? Self.axisHour(hours[index].start) : "")
                     .font(.caption2)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize()
                     .frame(maxWidth: .infinity)
             }
         }
@@ -158,10 +162,13 @@ struct UsageChartSection: View {
 
     private var hourlyAccessibilitySummary: String {
         hours.map { bucket in
-            let hour = Calendar.current.component(.hour, from: bucket.start)
-            return "\(hour):00: \(UsageFormatting.compactTokens(bucket.usage.tokens.total)) tokens"
+            "\(Self.axisHour(bucket.start)): \(UsageFormatting.compactTokens(bucket.usage.tokens.total)) tokens"
         }
         .joined(separator: ", ")
+    }
+
+    static func axisHour(_ date: Date) -> String {
+        date.formatted(.dateTime.hour(.defaultDigits(amPM: .abbreviated)))
     }
 }
 
@@ -191,18 +198,6 @@ struct ChartCallout: View {
     let bucket: UsageBucket
     let style: Style
 
-    private static let hourFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE HH:mm"
-        return formatter
-    }()
-
-    private static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE d MMM"
-        return formatter
-    }()
-
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
@@ -227,13 +222,15 @@ struct ChartCallout: View {
         .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
     }
 
+    /// "Mon, 9:00 – 10:00 AM" / "Mon, 09:00 – 10:00", and "Mon, Sep 1" /
+    /// "Mon 1 Sept" — the interval and the day in the user's own notation.
     private var title: String {
         switch style {
         case .hour:
             let end = bucket.start.addingTimeInterval(3600)
-            return Self.hourFormatter.string(from: bucket.start) + "–" + String(Self.hourFormatter.string(from: end).suffix(5))
+            return (bucket.start..<end).formatted(Date.IntervalFormatStyle().weekday(.abbreviated).hour().minute())
         case .day:
-            return Self.dayFormatter.string(from: bucket.start)
+            return bucket.start.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
         }
     }
 

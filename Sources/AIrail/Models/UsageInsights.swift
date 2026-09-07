@@ -39,10 +39,12 @@ struct UsageProjection: Sendable, Equatable {
 }
 
 extension UsageFormatting {
-    /// "35 min", "2.4 h", "1.5 days" — a rough, human span.
-    static func duration(hours: Double) -> String {
-        if hours < 1 { return "\(max(1, Int((hours * 60).rounded()))) min" }
-        if hours < 48 { return String(format: "%.1f h", hours) }
-        return String(format: "%.1f days", hours / 24)
+    /// "30m", "2h 24m", "3d 4h" — a span the way the Battery pane writes one.
+    /// Hours and minutes under two days, days and hours beyond; never "0m",
+    /// because a limit seconds away is still a minute away to a person.
+    static func duration(hours: Double, locale: Locale = .autoupdatingCurrent) -> String {
+        let seconds = max(60, hours * 3600)
+        let units: Set<Duration.UnitsFormatStyle.Unit> = hours < 48 ? [.hours, .minutes] : [.days, .hours]
+        return Duration.seconds(seconds).formatted(.units(allowed: units, width: .narrow).locale(locale))
     }
 }

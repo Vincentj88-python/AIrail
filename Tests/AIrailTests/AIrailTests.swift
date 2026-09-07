@@ -791,9 +791,35 @@ final class AIrailTests: XCTestCase {
     }
 
     func testDurationFormatting() {
-        XCTAssertEqual(UsageFormatting.duration(hours: 0.5), "30 min")
-        XCTAssertEqual(UsageFormatting.duration(hours: 2.4), "2.4 h")
-        XCTAssertEqual(UsageFormatting.duration(hours: 72), "3.0 days")
+        let us = Locale(identifier: "en_US")
+        let gb = Locale(identifier: "en_GB")
+        XCTAssertEqual(UsageFormatting.duration(hours: 0.5, locale: us), "30m")
+        XCTAssertEqual(UsageFormatting.duration(hours: 2.4, locale: us), "2h 24m")
+        XCTAssertEqual(UsageFormatting.duration(hours: 2.4, locale: gb), "2h 24m")
+        XCTAssertEqual(UsageFormatting.duration(hours: 26, locale: us), "26h", "hours and minutes until two days")
+        XCTAssertEqual(UsageFormatting.duration(hours: 72, locale: us), "3d")
+        XCTAssertEqual(UsageFormatting.duration(hours: 0.001, locale: us), "1m", "a limit seconds away never reads 0m")
+    }
+
+    /// Reset and clock strings follow the locale's clock and day-month order,
+    /// like the Battery pane; a US Mac reads "9:00 AM", a British one "09:00".
+    func testResetAndClockStringsFollowTheLocale() throws {
+        let us = Locale(identifier: "en_US")
+        let gb = Locale(identifier: "en_GB")
+        let calendar = Calendar.current
+        // Foundation sets AM/PM off with a narrow no-break space; compare on plain spaces.
+        func plain(_ s: String) -> String { s.replacingOccurrences(of: "\u{202F}", with: " ") }
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 9, day: 6, hour: 12)))
+        let monday = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 9, day: 7, hour: 9)))
+        XCTAssertEqual(plain(UsageFormatting.resetString(monday, now: now, locale: us)), "resets Mon 9:00 AM")
+        XCTAssertEqual(UsageFormatting.resetString(monday, now: now, locale: gb), "resets Mon 09:00")
+        let october = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 9)))
+        XCTAssertEqual(UsageFormatting.resetString(october, now: now, locale: us), "resets Oct 1")
+        XCTAssertEqual(UsageFormatting.resetString(october, now: now, locale: gb), "resets 1 Oct")
+        let afternoon = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 9, day: 6, hour: 14, minute: 32)))
+        XCTAssertEqual(plain(UsageFormatting.clockString(afternoon, now: now, locale: us)), "at 2:32 PM")
+        XCTAssertEqual(UsageFormatting.clockString(afternoon, now: now, locale: gb), "at 14:32")
+        XCTAssertEqual(UsageFormatting.currentMonthAbbreviation(october, locale: us), "OCT")
     }
 
     func testAPIValueEstimateApportionsTheWeekByModel() throws {

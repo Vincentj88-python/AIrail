@@ -150,9 +150,14 @@ struct NotchView: View {
                 Text(info.displayName)
                     .foregroundStyle(.white.opacity(0.9))
                 if let percent = snapshot?.ringPercent {
+                    // Digits roll when this provider's number moves; a
+                    // different provider is a different Text, not a roll.
                     Text("\(Int(percent.rounded()))%")
                         .fontWeight(.semibold)
                         .foregroundStyle(info.color)
+                        .contentTransition(.numericText(value: percent))
+                        .animation(.default, value: percent)
+                        .id(info.id)
                 } else if let plan = snapshot?.plan {
                     Text(plan)
                         .foregroundStyle(.white.opacity(0.6))

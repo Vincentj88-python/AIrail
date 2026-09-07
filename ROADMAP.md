@@ -87,7 +87,7 @@ Five ordered blocks; each lands before the next touches the same files. v0.2.1 =
 
 ### Block B — Honest numbers (11 items, ≈ 10 days)
 
-- [ ] **Live countdowns and locale formatting** · hours · wow 2/5 · `locale-formatting-live-countdowns`
+- [x] **Live countdowns and locale formatting** · hours · wow 2/5 · `locale-formatting-live-countdowns`
   Reset times tick down by themselves, clocks honour 12/24-hour, money follows your locale, percents roll like Apple's digits.
   - How: UsageFormatting.resetString/dollars/credits/duration gain `locale: Locale = .autoupdatingCurrent` using Date.FormatStyle, .currency(code:) and Duration.UnitsFormatStyle([.hours,.minutes], .narrow) so '2.4 h' becomes '2h 24m'. ChartCallout uses Date.IntervalFormatStyle; hourLabels use .hour(.defaultDigits(amPM:.abbreviated)). sessionSection renders Text(resetsAt, style: .relative) under 24 h. .contentTransition(.numericText(value:)) on the three percent Texts, .id(info.id) on the island caption. Tests pinned to en_US vs en_GB.
   - Why here: Block B, first: this is the already-approved '2h 40m' formatter done once; at-the-wall, pace, Siri dialog, used-elsewhere and the headroom caption all read from it. A plain en_US Mac currently sees 'resets Mon 14:00' beside a 12-hour clock in the same card.

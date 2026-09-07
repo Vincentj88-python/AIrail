@@ -196,6 +196,8 @@ struct OverlayView: View {
                             Text("\(Int(weekly.rounded()))")
                                 .font(.system(size: 27, weight: .semibold))
                                 .monospacedDigit()
+                                .contentTransition(.numericText(value: weekly))
+                                .animation(.default, value: weekly)
                             Text("%")
                                 .font(.system(size: 17, weight: .medium))
                                 .foregroundStyle(.secondary)
@@ -207,12 +209,12 @@ struct OverlayView: View {
                     }
                     VStack(alignment: .leading, spacing: 3) {
                         if hasSession, let resetsAt = snapshot?.resetsAt {
-                            Text("session " + UsageFormatting.resetString(resetsAt))
+                            resetText("session", resetsAt)
                         }
                         if let weeklyResetsAt = snapshot?.weeklyResetsAt {
-                            Text(period + " " + UsageFormatting.resetString(weeklyResetsAt))
+                            resetText(period, weeklyResetsAt)
                         } else if !hasSession, let resetsAt = snapshot?.resetsAt {
-                            Text(UsageFormatting.resetString(resetsAt))
+                            resetText(nil, resetsAt)
                         }
                     }
                     .font(.subheadline)
@@ -241,7 +243,18 @@ struct OverlayView: View {
         }
     }
 
-    /// "≈ 35 min to limit at this pace", or reassurance that the window resets first.
+    /// "session resets in 2 hr, 41 min", ticking by itself while the reset is
+    /// under a day away; "weekly resets Mon 9:00 AM" beyond that.
+    private func resetText(_ window: String?, _ date: Date) -> Text {
+        let prefix = window.map { $0 + " " } ?? ""
+        let untilReset = date.timeIntervalSinceNow
+        if untilReset > 0, untilReset < 24 * 3600 {
+            return Text(prefix + "resets in ") + Text(date, style: .relative)
+        }
+        return Text(prefix + UsageFormatting.resetString(date))
+    }
+
+    /// "≈ 2h 24m to limit at this pace", or reassurance that the window resets first.
     private func burnRate(_ projection: UsageProjection, info: ProviderInfo) -> some View {
         let resetsFirst = projection.resetsFirst
         return HStack(spacing: 6) {
@@ -274,6 +287,8 @@ struct OverlayView: View {
                 Text(percent.map { "\(Int($0.rounded()))" } ?? "—")
                     .font(.system(size: 42, weight: .semibold))
                     .monospacedDigit()
+                    .contentTransition(.numericText(value: percent ?? 0))
+                    .animation(.default, value: percent)
                 Text("%")
                     .font(.system(size: 19, weight: .medium))
                     .foregroundStyle(.secondary)
