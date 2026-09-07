@@ -1,10 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// The rail folded into the MacBook notch — or into a drawn island on a
-/// display without one. Collapsed, only a hairline shows under the notch (plus
-/// the pill itself when drawn); on hover the notch grows down into a Dynamic
-/// Island-style row of marks. Same three states and timings as the edge rail.
+/// The Top position: the rail folded into the MacBook notch, or hanging from
+/// the top centre of a display without one. Collapsed, only a hairline shows
+/// under the notch (or under the menu bar's centre, with nothing drawn over
+/// it); on hover an island grows down with a Dynamic Island-style row of
+/// marks. Same three states and timings as the edge rail.
 @MainActor
 final class NotchWindowController {
     var onSelect: (@MainActor (String) -> Void)?

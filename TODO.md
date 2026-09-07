@@ -74,6 +74,27 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Simplify: no drawn pill — Notch and Island become Top (2026-09-07)
+
+Block C, first item, with decision 3 (merge). `RailPosition` is `left, right,
+top`; a stored "notch" or "island" migrates to `.top` in `AppSettings.init`
+(test covers both plus an unknown value). `AppDelegate.resolveNotch` for Top:
+the hardware notch when the chosen display (or Automatic) has one, else a
+drawn anchor at the top centre of the chosen display. Idle on a display
+without a notch now shows **only the hairline** just under the menu bar's
+centre: `NotchView.hairline` is `Color.clear` over the anchor's height, so
+nothing floats over the menu bar or over full-screen video, transparent
+pixels pass clicks through, and the hairline's own pixels are the hover
+target (as on the edge rail and the hardware notch — don't set
+`ignoresMouseEvents = false`, it would make the 200 × 28 band a click sink).
+`NotchPillShape` and `NotchGeometry.virtualMinHeight` are gone; a display
+without a menu bar gets a zero-height band, so its hairline sits at the very
+top. The island itself is unchanged (glass on a drawn anchor, OLED black on
+the hardware notch). Rail pane: the segmented control is always Left · Right
+· Top, the Notch↔Island swap on display change is gone, footers rewritten.
+README's section is "Top". One run on the external display to confirm the
+hairline-only hover feels as reliable there is still owed. 91 green.
+
 ## Local usage ledger (2026-09-07)
 
 Block B, last item. `Providers/Support/UsageStore.swift`: an actor keeping one

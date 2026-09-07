@@ -16,17 +16,19 @@ enum NotchGeometry {
     }
 
     static let virtualWidth: CGFloat = 200
-    static let virtualMinHeight: CGFloat = 28
 
-    /// A Dynamic Island-style pill at the top centre of `screen`, as tall as
-    /// its menu bar so it reads as part of the bar.
+    /// Where the island hangs from on a display without a hardware notch: the
+    /// top centre, as tall as the menu bar (nothing is drawn there when idle;
+    /// the hairline sits just below, and the island grows out of it on hover).
+    /// A display without a menu bar has no such band, so the hairline sits at
+    /// the very top.
     static func virtualNotch(on screen: NSScreen) -> Notch {
         let menuBar = screen.frame.maxY - screen.visibleFrame.maxY
         return Notch(screen: screen, rect: virtualRect(in: screen.frame, menuBarHeight: menuBar), isVirtual: true)
     }
 
     static func virtualRect(in frame: NSRect, menuBarHeight: CGFloat) -> NSRect {
-        let height = max(virtualMinHeight, menuBarHeight.rounded())
+        let height = max(0, menuBarHeight.rounded())
         return NSRect(
             x: (frame.midX - virtualWidth / 2).rounded(),
             y: frame.maxY - height,

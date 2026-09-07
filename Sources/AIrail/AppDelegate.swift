@@ -117,14 +117,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyPosition(resettling: true)
     }
 
-    /// The notch the island hangs from for the current settings: the hardware
-    /// one for Notch, a drawn one on the chosen display for Island, nil for the
-    /// edge rail or when the wanted display isn't attached.
+    /// The notch the island hangs from for Top: the hardware one when the
+    /// chosen display has it, else a drawn one at the top centre of the chosen
+    /// display; nil for the edge rail.
     private func resolveNotch() -> NotchGeometry.Notch? {
         switch settings.position {
-        case .notch:
-            return ScreenSelection.notchAvailable(preference: settings.railDisplay) ? NotchGeometry.notch() : nil
-        case .island:
+        case .top:
+            if ScreenSelection.notchAvailable(preference: settings.railDisplay) { return NotchGeometry.notch() }
             return ScreenSelection.islandScreen(preference: settings.railDisplay).map(NotchGeometry.virtualNotch(on:))
         case .left, .right:
             return nil

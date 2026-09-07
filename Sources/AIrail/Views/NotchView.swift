@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// The notch-mode rail: a hairline under the notch when idle, a black island
-/// growing out of it with the provider marks on hover — Apple's Dynamic
-/// Island, on the Mac that has the cut-out for it.
+/// The Top position: a hairline under the notch (or under the menu bar's
+/// centre on a display without one) when idle, an island growing out of it
+/// with the provider marks on hover — Apple's Dynamic Island, on the Mac that
+/// has the cut-out for it, and the same gesture where it doesn't.
 struct NotchView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var manager: ProviderManager
@@ -66,20 +67,13 @@ struct NotchView: View {
 
     // MARK: Collapsed
 
-    /// On a real notch the top area is a cut-out, so nothing is drawn there;
-    /// on a display without one the same area is painted as the pill.
+    /// Idle, nothing is drawn where the notch (or the menu bar's centre) is —
+    /// transparent pixels pass clicks through — and the hairline sits just
+    /// under it. Its own pixels are the hover target, as on the edge rail.
     private var hairline: some View {
         VStack(spacing: 0) {
-            Group {
-                if ui.notchIsVirtual {
-                    islandBackground(NotchPillShape())
-                        .overlay(NotchPillShape().stroke(Color.white.opacity(0.1), lineWidth: 1))
-                        .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
-                } else {
-                    Color.clear
-                }
-            }
-            .frame(height: ui.notchSize.height)
+            Color.clear
+                .frame(height: ui.notchSize.height)
             RailHairline(reduceMotion: reduceMotion, axis: .horizontal, accent: railAccent)
             .frame(height: 7)
             .padding(.horizontal, 16)
@@ -87,7 +81,7 @@ struct NotchView: View {
         }
         .accessibilityElement()
         .accessibilityLabel("AIrail")
-        .accessibilityHint("Move the pointer to the notch to expand the usage island.")
+        .accessibilityHint("Move the pointer to the top centre of the display to expand the usage island.")
     }
 
     private var railAccent: Color {

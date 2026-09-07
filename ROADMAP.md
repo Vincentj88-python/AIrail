@@ -145,7 +145,7 @@ Five ordered blocks; each lands before the next touches the same files. v0.2.1 =
 
 ### Block C — The ambient surface (10 items, ≈ 13 days)
 
-- [ ] **Simplify: no drawn pill** · hours · wow 3/5 · `island-collapses-to-hairline`
+- [x] **Simplify: no drawn pill** (Notch and Island merged into Top, decision 3) · hours · wow 3/5 · `island-collapses-to-hairline`
   On displays without a notch, idle shows only the hairline at top centre; nothing floats over full-screen video.
   - How: NotchView.hairline becomes unconditional (Color.clear over ui.notchSize.height above RailHairline); delete NotchPillShape; keep virtualNotch, notchIsVirtual and frame(expanded:) so the island anchors to the same rect; leave ignoresMouseEvents default so the hairline pixels are the target and the menu-bar centre stays click-through. Drop NotchGeometry.virtualMinHeight; give RailPosition an explicit label ('Top'); rewrite the RailPane footer, NotchWindow header comment and README paragraph. Optionally fold Notch and Island into one 'top' case with a stored-value migration.
   - Why here: Block C, first: deletes the shape the morph would otherwise have to animate, and settles the Notch/Island merge (open question 3) before README screenshots are shot once.

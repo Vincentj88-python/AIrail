@@ -174,10 +174,18 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(migrated.position, .right, "v0.1's side setting carries over")
         XCTAssertEqual(migrated.railSide, .right)
 
-        migrated.position = .notch
+        migrated.position = .top
         let reloaded = AppSettings(defaults: defaults)
-        XCTAssertEqual(reloaded.position, .notch)
-        XCTAssertEqual(reloaded.railSide, .left, "notch mode's edge fallback is the left")
+        XCTAssertEqual(reloaded.position, .top)
+        XCTAssertEqual(reloaded.railSide, .left, "Top's edge fallback is the left")
+
+        // v0.2 stored Notch and Island as two positions; both come back as Top.
+        for legacy in ["notch", "island"] {
+            defaults.set(legacy, forKey: "railPosition")
+            XCTAssertEqual(AppSettings(defaults: defaults).position, .top, "v0.2's \(legacy) is Top now")
+        }
+        defaults.set("sideways", forKey: "railPosition")
+        XCTAssertEqual(AppSettings(defaults: defaults).position, .left, "an unknown value falls back to the left edge")
     }
 
     func testVirtualNotchSitsInTheMenuBarCentre() {
@@ -189,12 +197,12 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(pill.width, NotchGeometry.virtualWidth)
 
         let noMenuBar = NotchGeometry.virtualRect(in: NSRect(x: -1920, y: 360, width: 1920, height: 1080), menuBarHeight: 0)
-        XCTAssertEqual(noMenuBar.height, NotchGeometry.virtualMinHeight, "a display without a menu bar still gets a pill")
+        XCTAssertEqual(noMenuBar.height, 0, "a display without a menu bar has no band: the hairline sits at the very top")
         XCTAssertEqual(noMenuBar.midX, -960)
 
-        XCTAssertTrue(AppSettings.RailPosition.island.isIsland)
-        XCTAssertTrue(AppSettings.RailPosition.notch.isIsland)
-        XCTAssertFalse(AppSettings.RailPosition.left.isIsland)
+        XCTAssertTrue(AppSettings.RailPosition.top.isTop)
+        XCTAssertFalse(AppSettings.RailPosition.left.isTop)
+        XCTAssertEqual(AppSettings.RailPosition.allCases.map(\.label), ["Left", "Right", "Top"])
     }
 
     func testAutomaticRailDisplayIsTheOuterEdge() {

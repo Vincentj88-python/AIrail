@@ -135,19 +135,6 @@ private struct RailPane: View {
         ScreenSelection.notchAvailable(preference: settings.railDisplay)
     }
 
-    /// Notch is offered only for the display that has one; Island for any
-    /// other (a stored choice still shows so it can be changed).
-    private var availablePositions: [AppSettings.RailPosition] {
-        var positions: [AppSettings.RailPosition] = [.left, .right]
-        if notchAvailable || settings.position == .notch {
-            positions.append(.notch)
-        }
-        if !selectedDisplayHasNotch || settings.position == .island {
-            positions.append(.island)
-        }
-        return positions
-    }
-
     private var selectedDisplayHasNotch: Bool {
         ScreenSelection.screen(named: settings.railDisplay).map(ScreenSelection.hasNotch) ?? false
     }
@@ -159,13 +146,13 @@ private struct RailPane: View {
             return "Automatic uses the outer \(side) edge of your whole desktop — currently \(chosen) — so the pointer stops on the rail instead of crossing onto the next display."
         }
         if let screen = ScreenSelection.screen(named: settings.railDisplay), ScreenSelection.hasNotch(screen) {
-            return "\(screen.localizedName) has a notch, so Notch is available as a position."
+            return "\(screen.localizedName) has a notch, so Top folds the rail into it."
         }
-        return "Only the MacBook's built-in display has a notch. Island gives other displays the same look with a drawn one."
+        return "Only the MacBook's built-in display has a notch; on any other, Top is a hairline at the top centre."
     }
 
     private var positionFooter: String? {
-        guard !settings.position.isIsland,
+        guard !settings.position.isTop,
               let screen = ScreenSelection.railScreen(preference: settings.railDisplay, side: settings.railSide),
               let neighbour = ScreenSelection.neighbour(beyond: screen, side: settings.railSide)
         else { return nil }
@@ -182,29 +169,21 @@ private struct RailPane: View {
                         Text(name).tag(name)
                     }
                 }
-                .onChange(of: settings.railDisplay) { _, _ in
-                    // Notch only exists on one display; elsewhere the same look is Island.
-                    if settings.position == .notch, !notchAvailable {
-                        settings.position = .island
-                    } else if settings.position == .island, selectedDisplayHasNotch {
-                        settings.position = .notch
-                    }
-                }
             } footer: {
                 Text(displayFooter)
             }
             Section {
                 Picker("Position", selection: $settings.position) {
-                    ForEach(availablePositions) { position in
+                    ForEach(AppSettings.RailPosition.allCases) { position in
                         Text(position.label).tag(position)
                     }
                 }
                 .pickerStyle(.segmented)
             } footer: {
-                if settings.position == .notch {
-                    Text("Notch folds the rail into the notch: a hairline under it, a Dynamic Island-style row of marks on hover, the HUD beneath. Falls back to the left edge whenever that display isn't attached.")
-                } else if settings.position == .island {
-                    Text("Island draws a small black pill at the top centre of the display — the notch look without the notch. Hover it for the row of marks; the HUD hangs beneath. Automatic puts it on the display with the menu bar.")
+                if settings.position == .top {
+                    Text(selectedDisplayHasNotch || (settings.railDisplay == ScreenSelection.automatic && notchAvailable)
+                         ? "Top folds the rail into the notch: a hairline under it, a Dynamic Island-style row of marks on hover, the HUD beneath."
+                         : "Top is a hairline at the top centre of the display, under the menu bar; hover it and an island of marks grows down, the HUD beneath. Nothing sits over the menu bar until you hover.")
                 } else if let positionFooter {
                     Text(positionFooter)
                 } else {

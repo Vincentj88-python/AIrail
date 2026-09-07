@@ -33,15 +33,3 @@ struct IslandShape: Shape {
         return path
     }
 }
-
-/// The collapsed pill drawn on a display without a hardware notch: the same
-/// concave-fillet silhouette at menu-bar height, so expanding is one continuous
-/// black shape rather than a rectangle appearing.
-struct NotchPillShape: Shape {
-    var flare: CGFloat = 12
-    var bottomRadius: CGFloat = 10
-
-    func path(in rect: CGRect) -> Path {
-        IslandShape(flare: flare, bottomRadius: bottomRadius).path(in: rect)
-    }
-}

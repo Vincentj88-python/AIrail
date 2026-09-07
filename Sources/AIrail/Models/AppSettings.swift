@@ -12,11 +12,18 @@ final class AppSettings: ObservableObject {
     /// Where the rail lives: a screen edge, folded into the MacBook notch, or
     /// as a drawn island at the top centre of a display without one.
     enum RailPosition: String, CaseIterable, Identifiable {
-        case left, right, notch, island
+        case left, right, top
         var id: String { rawValue }
-        var label: String { rawValue.capitalized }
-        /// Notch and Island share the island window; only the edge rail differs.
-        var isIsland: Bool { self == .notch || self == .island }
+        var label: String {
+            switch self {
+            case .left: return "Left"
+            case .right: return "Right"
+            case .top: return "Top"
+            }
+        }
+        /// Top hangs from the notch where the display has one and from a
+        /// hairline at the top centre where it doesn't; the edge rail differs.
+        var isTop: Bool { self == .top }
     }
 
     private enum Key {
@@ -72,8 +79,9 @@ final class AppSettings: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if let stored = defaults.string(forKey: Key.railPosition), let position = RailPosition(rawValue: stored) {
-            self.position = position
+        if let stored = defaults.string(forKey: Key.railPosition) {
+            // v0.2 kept Notch and Island as two positions; both are Top now.
+            position = RailPosition(rawValue: stored) ?? (["notch", "island"].contains(stored) ? .top : .left)
         } else {
             // v0.1 stored only a side.
             position = defaults.string(forKey: Key.railSide) == "right" ? .right : .left

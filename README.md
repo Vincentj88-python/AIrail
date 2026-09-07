@@ -44,11 +44,11 @@ Cursor, Claude, Codex, Gemini, Copilot — real brand marks rendered from vector
 
 The rail shows your connected accounts (each has a *Show on rail* switch) and sizes itself to fit.
 
-## Notch and Island
+## Top
 
-On a MacBook with a notch, **Settings › Rail › Position › Notch** folds the rail into it, Dynamic Island-style: idle, a hairline sits under the notch; hover, and the notch grows down into a black island (OLED black, so it merges with the physical cut-out) holding the marks and rings; click, and the HUD hangs beneath it. It uses the notch geometry macOS reports (`safeAreaInsets`), works over full-screen apps, and falls back to the left edge whenever no notched display is attached (clamshell, external-only).
+**Settings › Rail › Position › Top** folds the rail into the top of the display, Dynamic Island-style. On a MacBook with a notch: idle, a hairline sits under the notch; hover, and the notch grows down into a black island (OLED black, so it merges with the physical cut-out) holding the marks and rings; click, and the HUD hangs beneath it. It uses the notch geometry macOS reports (`safeAreaInsets`) and works over full-screen apps.
 
-Displays without a notch get **Island** instead: the same look, drawn in the app's frosted dark glass (the wallpaper shows faintly through) with a small pill at the top centre of the menu bar, hairline beneath, growing into the marks on hover. Pick the display first, then the position — Notch is offered for the built-in display, Island for the others. Point at a mark and its name and percent reveal in a caption line beneath, the way the Dynamic Island shows detail.
+On a display without a notch, Top is the same gesture with nothing drawn until you ask for it: idle, only the hairline shows, just under the centre of the menu bar (nothing floats over the bar or over full-screen video); hover it, and an island in the app's frosted dark glass grows down with the marks. Pick the display first, then the position — with Automatic, Top uses the notch when a notched display is attached and the menu-bar display otherwise. Point at a mark and its name and percent reveal in a caption line beneath, the way the Dynamic Island shows detail.
 
 ## The card
 
