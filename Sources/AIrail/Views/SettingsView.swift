@@ -29,6 +29,8 @@ private struct GeneralPane: View {
 
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchAtLoginError: String?
+    /// The toggle is on but macOS says no: point at the switch that matters.
+    @State private var notificationsDenied = false
 
     var body: some View {
         Form {
@@ -55,8 +57,28 @@ private struct GeneralPane: View {
             }
             Section {
                 Toggle("Notify me about usage", isOn: $settings.notificationsEnabled)
+                    .onChange(of: settings.notificationsEnabled) { _, enabled in
+                        // The one-time system prompt comes with the toggle, not the first alert.
+                        if enabled {
+                            Task { notificationsDenied = await UsageNotifier.requestPermission() == .denied }
+                        }
+                    }
+                if settings.notificationsEnabled, notificationsDenied {
+                    HStack(spacing: 8) {
+                        Text("Notifications for AIrail are turned off in System Settings.")
+                            .foregroundStyle(.orange)
+                        Spacer()
+                        Button("Open System Settings…") {
+                            if let url = UsageNotifier.systemSettingsURL {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                    .font(.caption)
+                }
             } footer: {
-                Text("A macOS notification when an account passes 75% or 90%, and when a session window resets so you can batch heavy work.")
+                Text("A macOS notification when an account passes 75% or 90%, and one when that window resets so you can batch heavy work. Click one to open that account's HUD.")
             }
             Section {
                 // The commit only appears on a release.sh build (see BuildInfo).
@@ -65,6 +87,15 @@ private struct GeneralPane: View {
         }
         .formStyle(.grouped)
         .frame(height: 380)
+        .task { await readNotificationStatus() }
+        // Back from System Settings: the row above should follow what was changed there.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await readNotificationStatus() }
+        }
+    }
+
+    private func readNotificationStatus() async {
+        notificationsDenied = await UsageNotifier.systemStatus() == .denied
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

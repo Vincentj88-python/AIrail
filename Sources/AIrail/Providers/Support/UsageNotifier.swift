@@ -2,102 +2,180 @@ import Foundation
 import UserNotifications
 
 /// Native macOS notifications for the moments worth interrupting for: crossing
-/// a usage threshold, and a session window resetting so you can batch heavy
-/// work. Opt-in; fires at most once per event per window.
+/// a usage threshold, and that window resetting so you can batch heavy work.
+/// Opt-in; each threshold is announced once per window (remembered across
+/// relaunches), the reset once, at the time the provider itself reported.
+/// Every alert is grouped under its account and carries the provider id, so
+/// a click opens that HUD (see `AppDelegate`).
 @MainActor
 final class UsageNotifier {
-    /// Asks macOS for permission and reports whether it was granted. The real
-    /// one puts up the one-time "AIrail would like to send you notifications"
-    /// prompt, which is exactly why tests hand in their own answer.
-    typealias Authorize = @MainActor (_ granted: @escaping @MainActor (Bool) -> Void) -> Void
-    /// Hands a finished notification to Notification Center — or, in tests, to an array.
+    /// Whether macOS will show AIrail's notifications right now. Read at the
+    /// moment of delivery rather than remembered from launch, so the first
+    /// alert after launch — or the one right after Allow — isn't lost, and a
+    /// permission flipped in System Settings is honoured without a relaunch.
+    typealias Authorization = @MainActor () async -> Bool
+    /// Hands a notification to Notification Center — or, in tests, to an
+    /// array. Alerts carry no trigger; the reset alert carries its time.
     typealias Deliver = @MainActor (UNNotificationRequest) -> Void
+    /// Takes back pending requests by identifier (a scheduled reset alert).
+    typealias Withdraw = @MainActor ([String]) -> Void
 
-    private let authorize: Authorize
+    private let defaults: UserDefaults
+    private let now: () -> Date
+    private let authorization: Authorization
     private let deliver: Deliver
-    private var authorized = false
-    private var requested = false
-    /// Highest threshold already announced for the current window, per provider.
-    private var lastThreshold: [String: Int] = [:]
-    /// Session percent seen last refresh, to spot a window reset (a big drop).
-    private var lastPercent: [String: Double] = [:]
+    private let withdraw: Withdraw
+    /// Per provider, the highest threshold announced and the window it was
+    /// announced in (`"window"`: the reset time in unix seconds, absent when
+    /// the provider reports none). Kept in defaults so a relaunch at 80%
+    /// doesn't say 75 again.
+    private var announced: [String: [String: Int]] {
+        didSet { defaults.set(announced, forKey: Self.announcedKey) }
+    }
+    /// The window (unix seconds) each provider's reset alert is scheduled
+    /// for, so the 90% alert doesn't reschedule what the 75% one did.
+    private var scheduledResets: [String: Int] = [:]
 
+    private static let announcedKey = "announcedThresholds"
     private let thresholds = [90, 75]
 
-    init(authorize: @escaping Authorize, deliver: @escaping Deliver) {
-        self.authorize = authorize
+    init(
+        defaults: UserDefaults,
+        now: @escaping () -> Date = { Date() },
+        authorization: @escaping Authorization,
+        deliver: @escaping Deliver,
+        withdraw: @escaping Withdraw
+    ) {
+        self.defaults = defaults
+        self.now = now
+        self.authorization = authorization
         self.deliver = deliver
+        self.withdraw = withdraw
+        announced = defaults.dictionary(forKey: Self.announcedKey) as? [String: [String: Int]] ?? [:]
     }
 
-    /// The real thing: Notification Center for both permission and delivery.
+    /// The real thing: Notification Center for permission, delivery and withdrawal.
     convenience init() {
-        self.init(authorize: Self.systemAuthorize, deliver: Self.systemDeliver)
-    }
-
-    func enableIfNeeded() {
-        guard !requested else { return }
-        requested = true
-        authorize { [weak self] granted in
-            self?.authorized = granted
-        }
+        self.init(
+            defaults: .standard,
+            authorization: { await Self.systemAuthorization() },
+            deliver: { UNUserNotificationCenter.current().add($0) },
+            withdraw: { UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: $0) }
+        )
     }
 
     /// Called on each refresh with the latest snapshot for a connected account.
-    func consider(_ snapshot: UsageSnapshot, enabled: Bool) {
-        guard enabled, snapshot.status == .ok else { return }
-        enableIfNeeded()
+    func consider(_ snapshot: UsageSnapshot, enabled: Bool) async {
+        guard enabled, snapshot.status == .ok, let percent = snapshot.ringPercent else { return }
         let id = snapshot.providerId
-        let percent = snapshot.ringPercent ?? 0
-        let previous = lastPercent[id]
-        lastPercent[id] = percent
-
-        // A sharp drop means the window reset — a good time to resume heavy work.
-        if let previous, previous - percent >= 25, previous >= 30 {
-            lastThreshold[id] = nil
-            notify(
-                id: "\(id).reset",
-                title: "\(snapshot.displayName) usage reset",
-                body: "Your \(snapshot.sessionPercent != nil ? "session" : snapshot.periodLabel) window is fresh — good time for heavy work."
-            )
+        let window = snapshot.ringResetsAt.map { Int($0.timeIntervalSince1970) }
+        var announcedBefore = announcedThreshold(id, window: window)
+        if Int(percent) < announcedBefore - 25 {
+            // Well under what was announced, with no new reset time: the
+            // meter was reset without saying so (a raised key limit). Start over.
+            announced[id] = nil
+            announcedBefore = 0
         }
-
-        // Crossing a threshold, announced once until the window resets.
-        let crossed = thresholds.first { Int(percent) >= $0 }
-        if let crossed, (lastThreshold[id] ?? 0) < crossed {
-            lastThreshold[id] = crossed
-            var body = "\(crossed)% of your \(snapshot.sessionPercent != nil ? "session" : snapshot.periodLabel) used."
-            if let resets = snapshot.resetsAt ?? snapshot.weeklyResetsAt {
-                body += " " + UsageFormatting.resetString(resets).capitalizedFirst
+        guard let crossed = thresholds.first(where: { Int(percent) >= $0 }) else { return }
+        let announces = crossed > announcedBefore
+        let schedules = window != nil && scheduledResets[id] != window
+        guard announces || schedules else { return }
+        // Permission is read at the moment of delivery, and a threshold is
+        // remembered only once delivered, so an alert macOS wasn't yet allowed
+        // to show (at launch, or with the prompt still up) comes through on
+        // the next refresh instead of being lost.
+        guard await authorization() else { return }
+        if announces {
+            announced[id] = window.map { ["window": $0, "threshold": crossed] } ?? ["threshold": crossed]
+            var body = "\(crossed)% of your \(snapshot.ringWindowLabel) used."
+            if let resets = snapshot.ringResetsAt {
+                body += " " + UsageFormatting.resetString(resets, now: now()).capitalizedFirst
             }
-            notify(id: "\(id).threshold", title: snapshot.displayName, body: body)
+            deliver(request("\(id).threshold.\(crossed)", providerId: id, title: snapshot.displayName, body: body))
+        }
+        if schedules {
+            scheduleReset(for: snapshot)
         }
     }
 
+    /// An account removed: nothing remembered, nothing left pending.
     func forget(_ providerId: String) {
-        lastThreshold[providerId] = nil
-        lastPercent[providerId] = nil
+        announced[providerId] = nil
+        scheduledResets[providerId] = nil
+        withdraw(["\(providerId).reset"])
     }
 
-    private func notify(id: String, title: String, body: String) {
-        guard authorized else { return }
+    /// Takes back every pending reset alert — the toggle went off, or AIrail
+    /// is quitting and must not speak for an app that isn't running.
+    func withdrawResets(for providerIds: [String]) {
+        scheduledResets = [:]
+        withdraw(providerIds.map { "\($0).reset" })
+    }
+
+    private func announcedThreshold(_ providerId: String, window: Int?) -> Int {
+        guard let mark = announced[providerId], mark["window"] == window else { return 0 }
+        return mark["threshold"] ?? 0
+    }
+
+    /// One alert at the time the provider itself says the window resets,
+    /// scheduled once an account is past a threshold. From here the request
+    /// is the system's — it fires even if AIrail has quit — which is why
+    /// `forget`, the toggle and quitting withdraw it.
+    private func scheduleReset(for snapshot: UsageSnapshot) {
+        guard let resetsAt = snapshot.ringResetsAt else { return }
+        let id = snapshot.providerId
+        scheduledResets[id] = Int(resetsAt.timeIntervalSince1970)
+        let interval = resetsAt.timeIntervalSince(now())
+        guard interval > 1 else { return } // already past: nothing honest to schedule
+        deliver(request(
+            "\(id).reset",
+            providerId: id,
+            title: "\(snapshot.displayName) usage reset",
+            body: "Your \(snapshot.ringWindowLabel) window is fresh — good time for heavy work.",
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
+        ))
+    }
+
+    private func request(
+        _ identifier: String, providerId: String, title: String, body: String, trigger: UNNotificationTrigger? = nil
+    ) -> UNNotificationRequest {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = nil
-        let request = UNNotificationRequest(identifier: id + ".\(Int(Date().timeIntervalSince1970))", content: content, trigger: nil)
-        deliver(request)
+        content.threadIdentifier = providerId // one group per account in Notification Center
+        content.userInfo = ["providerId": providerId] // a click opens that account's HUD
+        return UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
     }
 
     // MARK: Notification Center
 
-    private static func systemAuthorize(_ granted: @escaping @MainActor (Bool) -> Void) {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { ok, _ in
-            Task { @MainActor in granted(ok) }
-        }
+    /// AIrail's own row in System Settings › Notifications. The URL scheme is
+    /// undocumented but long-standing; if it stops opening, nothing happens.
+    static var systemSettingsURL: URL? {
+        let bundleId = Bundle.main.bundleIdentifier ?? ""
+        return URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(bundleId)")
     }
 
-    private static func systemDeliver(_ request: UNNotificationRequest) {
-        UNUserNotificationCenter.current().add(request)
+    static func systemStatus() async -> UNAuthorizationStatus {
+        await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+    }
+
+    /// The one-time system prompt, put up when the toggle goes on — not at
+    /// the first alert. Reports what macOS decided once it's answered.
+    static func requestPermission() async -> UNAuthorizationStatus {
+        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+        return await systemStatus()
+    }
+
+    /// Authorized means deliver. Never asked (the toggle was on before the
+    /// prompt was answered) means ask now rather than drop the alert.
+    private static func systemAuthorization() async -> Bool {
+        switch await systemStatus() {
+        case .authorized: return true
+        case .notDetermined: return await requestPermission() == .authorized
+        default: return false
+        }
     }
 }
 

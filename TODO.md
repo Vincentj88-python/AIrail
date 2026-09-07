@@ -62,6 +62,40 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Notifications the Apple way (2026-09-06)
+
+- **What was wrong:** `UsageNotifier` asked for permission at the first
+  alert, remembered the answer from that one callback (so the first alert
+  after launch was dropped while it was pending, and a permission flipped in
+  System Settings never registered), kept "75 already said" in memory (a
+  relaunch at 80% said it again), guessed the window reset from a percent
+  drop on the next refresh, and a click did nothing. The toggle defaulted
+  on before anyone had been asked.
+- **Fix:** the prompt comes with the toggle (General pane, with an "Open
+  System Settings…" row when macOS says no); `consider` reads
+  `notificationSettings().authorizationStatus` at the moment of delivery and
+  remembers a threshold only once delivered, so an alert macOS wasn't yet
+  allowed to show comes through on the next refresh. Thresholds are kept in
+  defaults per provider + reset time (`announcedThresholds`); a meter with
+  no reset time starts over once it's 25 points under what was said. Past a
+  threshold, one `UNTimeIntervalNotificationTrigger` at the provider's own
+  reset time is handed to the system under `<id>.reset` and taken back on
+  Remove Account, toggle-off and quit (`ProviderManager.stop()` from
+  `applicationWillTerminate`), since the system would fire it for an app
+  that isn't running. Every alert has `threadIdentifier` = provider (one
+  group per account) and `userInfo.providerId`; `AppDelegate` is the
+  `UNUserNotificationCenterDelegate` from the first line of launch — banners
+  still show while AIrail is active, and a click expands the rail or island
+  and opens that HUD (`OverlayWindowController.show(providerId:)`, never a
+  toggle). The burn-rate samples restart when the reset time changes; a
+  slope across a reset meant nothing. `notificationsEnabled` defaults off.
+- **Left out:** the time-sensitive interruption level (needs the Developer
+  ID's entitlement; would be silently downgraded now), notification actions.
+- **By hand, Vincent:** the toggle is off on this build even if it was on
+  before (v0.2.0 never wrote the default); flip it once, answer the prompt.
+- 64 tests green (+3): once per window with the grouping fields, relaunch and
+  permission, the scheduled reset and its withdrawal, window change vs. pace.
+
 ## One network path, allowlisted (2026-09-06)
 
 - **What was wrong:** every request went through `URLSession.shared`, whose

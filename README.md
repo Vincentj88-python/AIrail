@@ -59,7 +59,7 @@ The collapsed hairline is a subtle line in a single calm accent that gently brea
 ## Insights
 
 - **Time to limit.** While a session is actively climbing, the HUD projects when you'll hit the limit at that pace ("≈ 35 min to limit"), or reassures you the window resets first.
-- **Notifications.** Opt-in macOS alerts when an account passes 75% or 90%, and when a session window resets so you can batch heavy work (Settings › General).
+- **Notifications.** Opt-in macOS alerts when an account passes 75% or 90%, and one at the moment that window resets so you can batch heavy work; click any of them to open that account's HUD (Settings › General — macOS asks for permission when you turn it on).
 - **Ambient warning.** The collapsed hairline stays a calm accent with headroom and warms to amber then red as your nearest limit fills — peripheral awareness without opening anything.
 - **API-equivalent value.** For subscription accounts, an estimate of what the week's tokens would have cost pay-as-you-go ("≈ $340 of API-priced tokens this week"), from public model prices — an estimate, never a bill.
 

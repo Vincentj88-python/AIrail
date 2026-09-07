@@ -67,6 +67,11 @@ final class OverlayWindowController {
             close()
             return
         }
+        show(providerId: providerId)
+    }
+
+    /// Open on (or swap to) a provider without ever closing — a notification click.
+    func show(providerId: String) {
         ui.selectedProviderId = providerId
         show()
     }

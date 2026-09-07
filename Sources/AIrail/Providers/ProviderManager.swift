@@ -32,6 +32,8 @@ final class ProviderManager: ObservableObject {
     private var lastLive: [String: UsageSnapshot] = [:]
     /// Recent (time, ring percent) samples per provider, for the burn-rate projection.
     private var percentHistory: [String: [(date: Date, percent: Double)]] = [:]
+    /// The window (its reset time) those samples belong to; a new window starts them over.
+    private var sampleWindows: [String: Date] = [:]
     /// The read in progress per provider. A second refresh joins it instead
     /// of starting another; disconnecting cancels it.
     private var inflight: [String: Task<Void, Never>] = [:]
@@ -75,6 +77,16 @@ final class ProviderManager: ObservableObject {
             .dropFirst()
             .sink { [weak self] interval in
                 self?.restartTimer(interval: interval)
+            }
+            .store(in: &cancellables)
+        // Off means off: a reset alert already handed to the system would
+        // otherwise still fire at the reset time.
+        settings.$notificationsEnabled
+            .dropFirst()
+            .filter { !$0 }
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.notifier.withdrawResets(for: self.providers.map(\.id))
             }
             .store(in: &cancellables)
     }
@@ -183,6 +195,7 @@ final class ProviderManager: ObservableObject {
         backoffUntil[providerId] = nil
         failureStreak[providerId] = nil
         percentHistory[providerId] = nil
+        sampleWindows[providerId] = nil
         notifier.forget(providerId)
         if isShowingDemo {
             Task { await refreshAll() }
@@ -194,6 +207,14 @@ final class ProviderManager: ObservableObject {
     func start() {
         Task { await refreshAll() }
         restartTimer(interval: settings.refreshInterval)
+    }
+
+    /// Quitting: the timer stops, and any reset alert handed to the system
+    /// is taken back so nothing fires for an app that isn't running.
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+        notifier.withdrawResets(for: providers.map(\.id))
     }
 
     /// Every connected account (or the demo set while nothing is connected)
@@ -251,7 +272,7 @@ final class ProviderManager: ObservableObject {
             backoffUntil[providerId] = nil
             failureStreak[providerId] = nil
             recordSample(snapshot)
-            notifier.consider(snapshot, enabled: settings.notificationsEnabled)
+            await notifier.consider(snapshot, enabled: settings.notificationsEnabled)
         } catch {
             guard stillWanted(providerId) else { return }
             let failure = (error as? ConnectionError) ?? .unreadable(error.localizedDescription)
@@ -297,11 +318,15 @@ final class ProviderManager: ObservableObject {
     private func recordSample(_ snapshot: UsageSnapshot) {
         guard let percent = snapshot.ringPercent else { return }
         let now = clock()
-        var samples = percentHistory[snapshot.providerId] ?? []
+        let id = snapshot.providerId
+        // A slope across a window reset means nothing: a new reset time
+        // starts the pace from scratch.
+        var samples = sampleWindows[id] == snapshot.ringResetsAt ? percentHistory[id] ?? [] : []
+        sampleWindows[id] = snapshot.ringResetsAt
         samples.append((now, percent))
         let cutoff = now.addingTimeInterval(-1800) // keep the last 30 minutes
         samples.removeAll { $0.date < cutoff }
-        percentHistory[snapshot.providerId] = samples
+        percentHistory[id] = samples
     }
 
     /// When the connected account would hit its limit at the pace it's been
@@ -317,13 +342,12 @@ final class ProviderManager: ObservableObject {
         let slope = (last.percent - first.percent) / hours // %/hour
         guard slope >= 1 else { return nil } // essentially flat → no useful projection
         let hitsAt = clock().addingTimeInterval((100 - percent) / slope * 3600)
-        let reset = snapshot.sessionPercent != nil ? snapshot.resetsAt : (snapshot.weeklyResetsAt ?? snapshot.resetsAt)
-        let resetsFirst = reset.map { $0 < hitsAt } ?? false
+        let resetsFirst = snapshot.ringResetsAt.map { $0 < hitsAt } ?? false
         return UsageProjection(
             ratePerHour: slope,
             hitsLimitAt: hitsAt,
             resetsFirst: resetsFirst,
-            basis: snapshot.sessionPercent != nil ? "session" : snapshot.periodLabel
+            basis: snapshot.ringWindowLabel
         )
     }
 

@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -18,6 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var usingNotch = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Before anything else, as Apple requires: a click that launches
+        // AIrail, or an alert arriving while it is active, must find us.
+        UNUserNotificationCenter.current().delegate = self
         NSApp.setActivationPolicy(.accessory)
 
         let rail = RailWindowController(settings: settings, manager: providerManager, ui: uiState)
@@ -162,5 +166,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// A notification click: the active surface expands as if hovered and
+    /// the HUD opens on that account (swapping if it's open on another).
+    private func showOverlay(providerId: String) {
+        guard settings.isConnected(providerId) else { return } // removed since the alert
+        if usingNotch {
+            notchController?.expand()
+        } else {
+            railController?.expand()
+        }
+        overlayController?.show(providerId: providerId)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if !LaunchOptions.isRunningTests {
+            providerManager.stop()
+        }
+    }
+
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
+}
+
+// MARK: - Notification Center
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    /// Nothing AIrail shows covers what an alert says, so one arriving while
+    /// it is the active app (the Settings window key) still gets its banner.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .list]
+    }
+
+    /// Every alert names its account (`UsageNotifier`); clicking one opens that HUD.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
+    ) async {
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+              let providerId = response.notification.request.content.userInfo["providerId"] as? String
+        else { return }
+        await MainActor.run { showOverlay(providerId: providerId) }
+    }
 }

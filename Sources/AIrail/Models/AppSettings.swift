@@ -81,7 +81,8 @@ final class AppSettings: ObservableObject {
         railDisplay = defaults.string(forKey: Key.railDisplay) ?? ScreenSelection.automatic
         autoHideDelay = defaults.object(forKey: Key.autoHideDelay) as? Double ?? 0.3
         refreshInterval = defaults.object(forKey: Key.refreshInterval) as? Double ?? 60
-        notificationsEnabled = defaults.object(forKey: Key.notifications) as? Bool ?? true
+        // Off until asked for: the permission prompt comes with the toggle.
+        notificationsEnabled = defaults.object(forKey: Key.notifications) as? Bool ?? false
         connectedAccountIds = Set(defaults.stringArray(forKey: Key.connectedAccounts) ?? [])
         hiddenFromRailIds = Set(defaults.stringArray(forKey: Key.hiddenFromRail) ?? [])
         // v0.1 stored "enabled providers"; accounts replaced that concept.

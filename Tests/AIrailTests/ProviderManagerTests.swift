@@ -80,7 +80,7 @@ final class ProviderManagerTests: XCTestCase {
     func testBackoffGrowsWithTheStreakAndHonoursRetryAfter() async throws {
         let clock = TestClock()
         let fake = FakeProvider(id: "codex", results: [.failure(.network("offline"))])
-        let (manager, settings) = try makeManager([fake], clock: { clock.now })
+        let (manager, settings) = try makeManager([fake], clock: clock)
         settings.connect("codex")
 
         await manager.refresh("codex") // first failure: one minute
@@ -201,38 +201,111 @@ final class ProviderManagerTests: XCTestCase {
     // MARK: Alerts and pace
 
     @MainActor
-    func testNotifierAnnouncesEachThresholdOncePerWindow() {
+    func testNotifierAnnouncesEachThresholdOncePerWindow() async throws {
+        let clock = TestClock()
         let inbox = NotificationInbox()
-        let notifier = UsageNotifier(authorize: { $0(true) }, deliver: { inbox.requests.append($0) })
-        let resets = Date().addingTimeInterval(3600)
-        func consider(_ percent: Double, enabled: Bool = true) {
-            notifier.consider(Self.snapshot("claude", percent: percent, resetsAt: resets), enabled: enabled)
+        let notifier = try makeNotifier(inbox, clock: clock)
+        var resets = clock.now.addingTimeInterval(3600)
+        func consider(_ percent: Double, enabled: Bool = true) async {
+            await notifier.consider(Self.snapshot("claude", percent: percent, resetsAt: resets), enabled: enabled)
         }
 
-        consider(50)
+        await consider(50)
         XCTAssertTrue(inbox.requests.isEmpty)
-        consider(76)
-        XCTAssertEqual(inbox.requests.count, 1)
+        await consider(76)
+        XCTAssertEqual(inbox.bodies.count, 1)
         XCTAssertTrue(inbox.bodies[0].hasPrefix("75% of your session used. Resets "), inbox.bodies[0])
-        consider(80)
-        XCTAssertEqual(inbox.requests.count, 1, "75 is announced once")
-        consider(91)
-        XCTAssertEqual(inbox.requests.count, 2)
+        let alert = try XCTUnwrap(inbox.alerts.first)
+        XCTAssertEqual(alert.identifier, "claude.threshold.75")
+        XCTAssertEqual(alert.content.threadIdentifier, "claude", "grouped per account in Notification Center")
+        XCTAssertEqual(alert.content.userInfo["providerId"] as? String, "claude", "so a click opens that HUD")
+        await consider(80)
+        XCTAssertEqual(inbox.bodies.count, 1, "75 is announced once")
+        await consider(91)
+        XCTAssertEqual(inbox.bodies.count, 2)
         XCTAssertTrue(inbox.bodies[1].hasPrefix("90%"))
-        consider(99)
-        XCTAssertEqual(inbox.requests.count, 2)
-        consider(3)
-        XCTAssertEqual(inbox.requests.count, 3)
-        XCTAssertEqual(inbox.requests[2].content.title, "Claude usage reset")
-        consider(80)
-        XCTAssertEqual(inbox.requests.count, 4, "a fresh window announces 75 again")
-        consider(95, enabled: false)
-        XCTAssertEqual(inbox.requests.count, 4, "off means off")
+        await consider(99)
+        XCTAssertEqual(inbox.bodies.count, 2)
 
-        let denied = NotificationInbox()
-        let refused = UsageNotifier(authorize: { $0(false) }, deliver: { denied.requests.append($0) })
-        refused.consider(Self.snapshot("codex", percent: 95), enabled: true)
-        XCTAssertTrue(denied.requests.isEmpty, "nothing is delivered without permission")
+        clock.advance(by: 3600)
+        resets = clock.now.addingTimeInterval(5 * 3600) // the provider reports the next window
+        await consider(3)
+        XCTAssertEqual(inbox.bodies.count, 2, "the reset is the system's scheduled alert, not a refresh's guess")
+        await consider(80)
+        XCTAssertEqual(inbox.bodies.count, 3, "a fresh window announces 75 again")
+        await consider(95, enabled: false)
+        XCTAssertEqual(inbox.bodies.count, 3, "off means off")
+    }
+
+    @MainActor
+    func testNotifierRemembersTheWindowAcrossRelaunchAndWaitsForPermission() async throws {
+        let clock = TestClock()
+        let inbox = NotificationInbox()
+        let defaults = try makeDefaults()
+        let notifier = try makeNotifier(inbox, clock: clock, defaults: defaults)
+        let resets = clock.now.addingTimeInterval(3600)
+        func consider(_ id: String, _ percent: Double, on notifier: UsageNotifier) async {
+            await notifier.consider(Self.snapshot(id, percent: percent, resetsAt: id == "codex" ? resets : nil), enabled: true)
+        }
+
+        inbox.authorized = false
+        await consider("codex", 80, on: notifier)
+        XCTAssertTrue(inbox.requests.isEmpty, "nothing is delivered without permission")
+        inbox.authorized = true
+        await consider("codex", 80, on: notifier)
+        XCTAssertEqual(inbox.bodies.count, 1, "an alert macOS wasn't yet allowed to show comes through once it is")
+
+        let relaunched = try makeNotifier(inbox, clock: clock, defaults: defaults)
+        await consider("codex", 82, on: relaunched)
+        XCTAssertEqual(inbox.bodies.count, 1, "a relaunch in the same window doesn't say 75 again")
+        await consider("codex", 91, on: relaunched)
+        XCTAssertEqual(inbox.bodies.count, 2)
+
+        // A meter with no reset time only starts over once it's well under
+        // what was announced — a raised key limit, not a wobble.
+        await consider("openrouter", 78, on: relaunched)
+        XCTAssertEqual(inbox.bodies.count, 3)
+        await consider("openrouter", 60, on: relaunched)
+        await consider("openrouter", 78, on: relaunched)
+        XCTAssertEqual(inbox.bodies.count, 3, "a dip to 60 isn't a reset")
+        await consider("openrouter", 20, on: relaunched)
+        await consider("openrouter", 78, on: relaunched)
+        XCTAssertEqual(inbox.bodies.count, 4)
+    }
+
+    @MainActor
+    func testNotifierSchedulesTheResetAtTheReportedTimeAndTakesItBack() async throws {
+        let clock = TestClock()
+        let inbox = NotificationInbox()
+        let notifier = try makeNotifier(inbox, clock: clock)
+        let resets = clock.now.addingTimeInterval(90 * 60)
+        func consider(_ id: String, _ percent: Double, resetsAt: Date? = resets) async {
+            await notifier.consider(Self.snapshot(id, percent: percent, resetsAt: resetsAt), enabled: true)
+        }
+
+        await consider("claude", 60)
+        XCTAssertTrue(inbox.scheduled.isEmpty, "nothing to wait for until a threshold is passed")
+        await consider("claude", 76)
+        let reset = try XCTUnwrap(inbox.scheduled.first)
+        XCTAssertEqual(reset.identifier, "claude.reset")
+        XCTAssertEqual(reset.content.title, "Claude usage reset")
+        XCTAssertEqual(reset.content.threadIdentifier, "claude")
+        let trigger = try XCTUnwrap(reset.trigger as? UNTimeIntervalNotificationTrigger)
+        XCTAssertEqual(trigger.timeInterval, 90 * 60, accuracy: 1, "at the time the provider reported, not on the next refresh")
+        XCTAssertFalse(trigger.repeats)
+        await consider("claude", 92)
+        XCTAssertEqual(inbox.scheduled.count, 1, "90% doesn't schedule it twice")
+
+        notifier.forget("claude")
+        XCTAssertEqual(inbox.withdrawn, ["claude.reset"], "a removed account's pending alert goes with it")
+        await consider("claude", 92)
+        XCTAssertEqual(inbox.scheduled.count, 2, "connected again, it's watched again")
+        notifier.withdrawResets(for: ["claude", "codex"])
+        XCTAssertEqual(inbox.withdrawn, ["claude.reset", "claude.reset", "codex.reset"])
+
+        await consider("codex", 80, resetsAt: clock.now.addingTimeInterval(-60))
+        XCTAssertEqual(inbox.bodies.count, 4, "the threshold is still announced")
+        XCTAssertEqual(inbox.scheduled.count, 2, "but a reset time already past isn't scheduled")
     }
 
     @MainActor
@@ -244,8 +317,7 @@ final class ProviderManagerTests: XCTestCase {
             .success(Self.snapshot("claude", percent: 20)),
             .success(Self.snapshot("claude", percent: 92)),
         ])
-        let notifier = UsageNotifier(authorize: { $0(true) }, deliver: { inbox.requests.append($0) })
-        let (manager, settings) = try makeManager([fake], notifier: notifier, clock: { clock.now })
+        let (manager, settings) = try makeManager([fake], inbox: inbox, clock: clock)
         settings.notificationsEnabled = true
         settings.connect("claude")
 
@@ -264,21 +336,78 @@ final class ProviderManagerTests: XCTestCase {
         XCTAssertEqual(inbox.bodies, ["90% of your session used."])
     }
 
+    @MainActor
+    func testNewWindowRestartsThePaceAndOffTakesBackTheReset() async throws {
+        let clock = TestClock()
+        let inbox = NotificationInbox()
+        let window = clock.now.addingTimeInterval(2 * 3600)
+        let next = window.addingTimeInterval(5 * 3600)
+        let fake = FakeProvider(id: "claude", results: [
+            .success(Self.snapshot("claude", percent: 70, resetsAt: window)),
+            .success(Self.snapshot("claude", percent: 80, resetsAt: window)),
+            .success(Self.snapshot("claude", percent: 5, resetsAt: next)),
+            .success(Self.snapshot("claude", percent: 6, resetsAt: next)),
+        ])
+        let (manager, settings) = try makeManager([fake], inbox: inbox, clock: clock)
+        settings.notificationsEnabled = true
+        settings.connect("claude")
+
+        await manager.refresh("claude")
+        clock.advance(by: 600)
+        await manager.refresh("claude")
+        XCTAssertEqual(try XCTUnwrap(manager.projection(for: "claude")).ratePerHour, 60, accuracy: 0.001)
+        XCTAssertEqual(inbox.bodies.count, 1)
+        XCTAssertEqual(inbox.scheduled.map(\.identifier), ["claude.reset"], "past 75, the reset is scheduled")
+
+        clock.advance(by: 2 * 3600)
+        await manager.refresh("claude") // the window rolled: a new reset time
+        clock.advance(by: 600)
+        await manager.refresh("claude")
+        let projection = try XCTUnwrap(manager.projection(for: "claude"))
+        XCTAssertEqual(projection.ratePerHour, 6, accuracy: 0.001, "the pace is measured inside the new window only")
+
+        settings.notificationsEnabled = false
+        XCTAssertEqual(inbox.withdrawn, ["claude.reset"], "off takes back what the system was holding")
+        manager.stop()
+        XCTAssertEqual(inbox.withdrawn, ["claude.reset", "claude.reset"], "so does quitting")
+    }
+
     // MARK: Helpers
 
     /// A manager over `providers` on a throwaway defaults suite, with a
-    /// notifier that delivers nowhere unless one is passed in.
+    /// notifier delivering to `inbox` (nowhere anyone looks, by default).
     @MainActor
     private func makeManager(
         _ providers: [FakeProvider],
-        notifier: UsageNotifier = UsageNotifier(authorize: { $0(true) }, deliver: { _ in }),
-        clock: @escaping () -> Date = { Date() }
+        inbox: NotificationInbox = NotificationInbox(),
+        clock: TestClock = TestClock()
     ) throws -> (ProviderManager, AppSettings) {
+        let defaults = try makeDefaults()
+        let settings = AppSettings(defaults: defaults)
+        let notifier = try makeNotifier(inbox, clock: clock, defaults: defaults)
+        return (ProviderManager(settings: settings, providers: providers, notifier: notifier, clock: { clock.now }), settings)
+    }
+
+    /// A notifier whose system side is `inbox`, on its own throwaway
+    /// defaults unless a suite is shared to play a relaunch.
+    @MainActor
+    private func makeNotifier(_ inbox: NotificationInbox, clock: TestClock, defaults: UserDefaults? = nil) throws -> UsageNotifier {
+        UsageNotifier(
+            defaults: try defaults ?? makeDefaults(),
+            now: { clock.now },
+            authorization: { inbox.authorized },
+            deliver: { inbox.requests.append($0) },
+            withdraw: { inbox.withdrawn += $0 }
+        )
+    }
+
+    /// A defaults suite of its own, removed at teardown.
+    @MainActor
+    private func makeDefaults() throws -> UserDefaults {
         let suite = "AIrailTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
-        let settings = AppSettings(defaults: defaults)
-        return (ProviderManager(settings: settings, providers: providers, notifier: notifier, clock: clock), settings)
+        return defaults
     }
 
     /// Lets queued main-actor work run until `condition` holds; fails after two seconds.
@@ -359,9 +488,16 @@ final class TestClock {
     }
 }
 
-/// Where a test's notifier delivers to.
+/// The system's side of notifications, for tests: whether AIrail may post,
+/// what it handed over and what it took back.
 @MainActor
 final class NotificationInbox {
+    var authorized = true
     var requests: [UNNotificationRequest] = []
-    var bodies: [String] { requests.map(\.content.body) }
+    var withdrawn: [String] = []
+    /// Shown now (no trigger).
+    var alerts: [UNNotificationRequest] { requests.filter { $0.trigger == nil } }
+    /// Left with the system to fire later (the reset alert).
+    var scheduled: [UNNotificationRequest] { requests.filter { $0.trigger != nil } }
+    var bodies: [String] { alerts.map(\.content.body) }
 }

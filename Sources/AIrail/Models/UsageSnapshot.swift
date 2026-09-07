@@ -54,6 +54,16 @@ extension UsageSnapshot {
         (sessionPercent ?? weeklyPercent).map(Self.clampPercent)
     }
 
+    /// When the window behind `ringPercent` resets, if the provider says.
+    var ringResetsAt: Date? {
+        sessionPercent != nil ? resetsAt : (weeklyResetsAt ?? resetsAt)
+    }
+
+    /// That window the way the text names it: "session", or the period label.
+    var ringWindowLabel: String {
+        sessionPercent != nil ? "session" : periodLabel
+    }
+
     /// The same numbers, re-labelled — used to keep the last real reading on
     /// screen (as `stale`) when a refresh fails.
     func marking(_ status: UsageStatus) -> UsageSnapshot {
