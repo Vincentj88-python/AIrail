@@ -41,7 +41,7 @@ struct NotchView: View {
                 NSApp.activate(ignoringOtherApps: true)
                 openSettings()
             }
-            Button("Check for Updates…") {
+            Button(UpdateChecker.menuTitle(for: ui.availableUpdate)) {
                 UpdateChecker.checkForUpdates()
             }
             Divider()

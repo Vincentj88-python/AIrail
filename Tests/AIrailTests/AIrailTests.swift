@@ -1,3 +1,4 @@
+import UserNotifications
 import XCTest
 @testable import AIrail
 
@@ -768,6 +769,69 @@ final class AIrailTests: XCTestCase {
         XCTAssertTrue(UpdateChecker.isNewer("1.0", than: "0.9.9"))
         XCTAssertFalse(UpdateChecker.isNewer("0.2.0", than: "0.2.0"))
         XCTAssertFalse(UpdateChecker.isNewer("0.1.9", than: "0.2.0"))
+    }
+
+    @MainActor
+    func testReleaseParsePicksTheDmgAndThePage() throws {
+        let body = """
+        {"tag_name": "v0.2.1",
+         "html_url": "https://github.com/Vincentj88-python/AIrail/releases/tag/v0.2.1",
+         "body": "Quieter update check.",
+         "assets": [
+           {"name": "AIrail-0.2.1.dmg.sha256",
+            "browser_download_url": "https://github.com/Vincentj88-python/AIrail/releases/download/v0.2.1/AIrail-0.2.1.dmg.sha256"},
+           {"name": "AIrail-0.2.1.dmg",
+            "browser_download_url": "https://github.com/Vincentj88-python/AIrail/releases/download/v0.2.1/AIrail-0.2.1.dmg"}
+         ]}
+        """
+        let release = try XCTUnwrap(UpdateChecker.parse(Data(body.utf8)))
+        XCTAssertEqual(release.version, "0.2.1")
+        XCTAssertEqual(release.notes, "Quieter update check.")
+        XCTAssertEqual(release.page.absoluteString, "https://github.com/Vincentj88-python/AIrail/releases/tag/v0.2.1")
+        XCTAssertEqual(release.dmg?.absoluteString, "https://github.com/Vincentj88-python/AIrail/releases/download/v0.2.1/AIrail-0.2.1.dmg")
+
+        // No tag (a 404 body while the repo is private) is no release; a tag
+        // with nothing attached is a release whose page is the listing.
+        XCTAssertNil(try UpdateChecker.parse(Data(#"{"message": "Not Found"}"#.utf8)))
+        let bare = try XCTUnwrap(UpdateChecker.parse(Data(#"{"tag_name": "0.3.0"}"#.utf8)))
+        XCTAssertEqual(bare.version, "0.3.0")
+        XCTAssertNil(bare.dmg)
+        XCTAssertEqual(bare.page, UpdateChecker.releasesPage)
+    }
+
+    @MainActor
+    func testUpdateNotificationCarriesItsLinksAndTheResponseFollowsThem() throws {
+        let page = try XCTUnwrap(URL(string: "https://github.com/Vincentj88-python/AIrail/releases/tag/v0.2.1"))
+        let dmg = try XCTUnwrap(URL(string: "https://github.com/Vincentj88-python/AIrail/releases/download/v0.2.1/AIrail-0.2.1.dmg"))
+        let release = UpdateChecker.Release(version: "0.2.1", notes: "", page: page, dmg: dmg)
+
+        let request = UpdateChecker.notificationRequest(for: release, current: "0.2.0")
+        XCTAssertEqual(request.identifier, "update", "a newer release replaces the earlier notification, never stacks")
+        XCTAssertNil(request.trigger)
+        XCTAssertNil(request.content.sound)
+        XCTAssertEqual(request.content.categoryIdentifier, UpdateChecker.notificationCategory.identifier)
+        XCTAssertEqual(request.content.body, "AIrail 0.2.1 is available — you have 0.2.0.")
+        XCTAssertEqual(UpdateChecker.notificationCategory.actions.map(\.identifier), [UpdateChecker.downloadActionIdentifier])
+
+        // The Download button opens the DMG, a plain click the release page.
+        let userInfo = request.content.userInfo
+        XCTAssertEqual(UpdateChecker.destination(for: UpdateChecker.downloadActionIdentifier, in: userInfo), dmg)
+        XCTAssertEqual(UpdateChecker.destination(for: UNNotificationDefaultActionIdentifier, in: userInfo), page)
+
+        // Only a DMG served from github.com is ever opened; anything else is the page.
+        var elsewhere = userInfo
+        elsewhere["dmg"] = "https://example.com/AIrail-0.2.1.dmg"
+        XCTAssertEqual(UpdateChecker.destination(for: UpdateChecker.downloadActionIdentifier, in: elsewhere), page)
+        let noDmg = UpdateChecker.Release(version: "0.2.1", notes: "", page: page, dmg: nil)
+        let bare = UpdateChecker.notificationRequest(for: noDmg, current: "0.2.0")
+        XCTAssertEqual(UpdateChecker.destination(for: UpdateChecker.downloadActionIdentifier, in: bare.content.userInfo), page)
+    }
+
+    @MainActor
+    func testUpdateMenuTitleNamesTheRelease() throws {
+        XCTAssertEqual(UpdateChecker.menuTitle(for: nil), "Check for Updates…")
+        let release = UpdateChecker.Release(version: "0.2.1", notes: "", page: UpdateChecker.releasesPage, dmg: nil)
+        XCTAssertEqual(UpdateChecker.menuTitle(for: release), "Update to 0.2.1…")
     }
 
     func testBuildLabelShowsCommitOnlyWhenStamped() {

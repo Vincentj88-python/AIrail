@@ -16,4 +16,7 @@ final class RailUIState: ObservableObject {
     @Published var notchIsVirtual = false
     /// Which Settings tab opens next; the overlay's "Connect…" jumps to Accounts.
     @Published var settingsTab: SettingsTab = .general
+    /// The newer release the last update check found, nil when there is none
+    /// (or no check has answered yet); the menus read "Update to x.y.z…" while set.
+    @Published var availableUpdate: UpdateChecker.Release?
 }

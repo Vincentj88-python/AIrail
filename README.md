@@ -106,7 +106,7 @@ AIrail is distributed as a signed DMG and source on GitHub, not through the App 
 
 ## Releasing & updates
 
-AIrail checks for updates itself: **right-click the rail → Check for Updates…** (also in the HUD's ⋯ menu), and it looks once a day in the background. When a newer GitHub release exists it shows the notes and a Download button. This starts working once the repo is public; while it's private the check just reports "up to date."
+AIrail checks for updates itself: **right-click the rail → Check for Updates…** (also in the HUD's ⋯ menu) asks GitHub for the latest release and shows the notes with a Download button. In the background it asks once a day — an hourly timer, one anonymous request to `api.github.com` (the same allowlisted session as the usage checks, nothing about you in it). A newer release gets one macOS notification with a Download button, and the menu item reads **Update to x.y.z…** until you have it; the background check never puts a window over your work. This starts working once the repo is public; while it's private the check just reports "up to date."
 
 To publish a new version:
 

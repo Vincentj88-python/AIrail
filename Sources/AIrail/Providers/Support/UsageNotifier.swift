@@ -169,8 +169,9 @@ final class UsageNotifier {
     }
 
     /// Authorized means deliver. Never asked (the toggle was on before the
-    /// prompt was answered) means ask now rather than drop the alert.
-    private static func systemAuthorization() async -> Bool {
+    /// prompt was answered) means ask now rather than drop the alert. The
+    /// update notification (`UpdateChecker`) asks the same question.
+    static func systemAuthorization() async -> Bool {
         switch await systemStatus() {
         case .authorized: return true
         case .notDetermined: return await requestPermission() == .authorized

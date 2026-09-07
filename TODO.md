@@ -62,6 +62,33 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Quiet the update check (2026-09-06)
+
+- **What was wrong:** the release check ran once, at launch, and when it
+  found something it put a modal `NSAlert` — `NSApp.activate` and all — over
+  whatever you were doing; an app left running for a week never looked again.
+- **Fix:** the menu item still gets its alert (it asked). The background path
+  posts one notification per release version (`notifiedUpdateVersion`,
+  remembered only once posted), category `update` with a **Download**
+  button, silent, no activation; a click opens the release page and Download
+  the DMG — only one served from github.com — in the browser, AIrail stays
+  put. `AppDelegate` registers the category next to the delegate and routes
+  the response by category. An hourly tolerant `Timer`
+  (`UpdateChecker.startBackgroundChecks`) replaces the launch-only call; the
+  request itself stays once a day (`lastUpdateCheck`). Each answer lands in
+  `RailUIState.availableUpdate`, so the three menus read **Update to
+  0.2.1…** until you have it. README's Releasing section says all this.
+- **Permission:** the same question the usage alerts ask
+  (`UsageNotifier.systemAuthorization`, now internal): never asked → the
+  system prompt, once; refused → nothing, never an alert as the fallback.
+  The menu relabel needs none of it.
+- **By hand, Vincent:** nothing now. The private repo answers 404, so the
+  quiet path stays silent until go-public; give the first real one a look
+  (the banner, the Download button, the relabel).
+- 67 tests green (+3): release parsing, the notification's links and where a
+  response goes, the menu title. Timer and posting are untested, like the
+  refresh timer.
+
 ## Notifications the Apple way (2026-09-06)
 
 - **What was wrong:** `UsageNotifier` asked for permission at the first

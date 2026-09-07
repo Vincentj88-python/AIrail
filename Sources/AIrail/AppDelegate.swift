@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Before anything else, as Apple requires: a click that launches
         // AIrail, or an alert arriving while it is active, must find us.
         UNUserNotificationCenter.current().delegate = self
+        UNUserNotificationCenter.current().setNotificationCategories([UpdateChecker.notificationCategory])
         NSApp.setActivationPolicy(.accessory)
 
         let rail = RailWindowController(settings: settings, manager: providerManager, ui: uiState)
@@ -62,7 +63,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !LaunchOptions.isRunningTests {
             HTTPClient.removeLegacyStores() // v0.2.0's cache and cookie jar, before the first read
             providerManager.start()
-            UpdateChecker.checkInBackgroundIfDue()
+            UpdateChecker.startBackgroundChecks { [weak self] release in
+                self?.uiState.availableUpdate = release // the menus read "Update to x.y.z…"
+            }
         }
 
         if let providerId = LaunchOptions.overlayProviderId {
@@ -198,12 +201,21 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         [.banner, .list]
     }
 
-    /// Every alert names its account (`UsageNotifier`); clicking one opens that HUD.
+    /// Every usage alert names its account (`UsageNotifier`); clicking one
+    /// opens that HUD. The update notification carries its links instead:
+    /// its Download button opens the DMG, a click the release page — in the
+    /// browser, with AIrail staying where it is (`UpdateChecker`).
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
+        let content = response.notification.request.content
+        if content.categoryIdentifier == UpdateChecker.categoryIdentifier {
+            guard let url = UpdateChecker.destination(for: response.actionIdentifier, in: content.userInfo) else { return }
+            await MainActor.run { _ = NSWorkspace.shared.open(url) }
+            return
+        }
         guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
-              let providerId = response.notification.request.content.userInfo["providerId"] as? String
+              let providerId = content.userInfo["providerId"] as? String
         else { return }
         await MainActor.run { showOverlay(providerId: providerId) }
     }
