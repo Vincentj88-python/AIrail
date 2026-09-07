@@ -92,6 +92,9 @@ struct UsageDetail: Sendable, Equatable {
     /// Everything in the last 7 days, summed.
     var week = UsageAggregate()
     var meters: [UsageMeter] = []
+    /// When this Mac's tool last wrote a counted transcript line, for the
+    /// providers whose history comes from local transcripts.
+    var newestLocalEvent: Date? = nil
 
     var hasActivity: Bool { !week.isEmpty }
 

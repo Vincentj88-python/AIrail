@@ -233,6 +233,9 @@ struct OverlayView: View {
                     } else if let snapshot, snapshot.status == .ok, let pace = snapshot.pace() {
                         paceLine(pace, info: info)
                     }
+                    if let note = manager.elsewhere[info.id], snapshot?.status == .ok {
+                        elsewhereLine(note, info: info)
+                    }
                     if let lastUpdated = snapshot?.lastUpdated {
                         HStack(spacing: 6) {
                             Circle()
@@ -280,6 +283,24 @@ struct OverlayView: View {
         .accessibilityLabel(resetsFirst
             ? "On track, the \(projection.basis) window resets before the limit"
             : "About \(UsageFormatting.duration(hours: projection.hoursToLimit)) to the limit at the current pace")
+    }
+
+    /// "No Claude Code activity on this Mac this session" — the session figure
+    /// moved while this Mac's transcripts didn't. An observation, not a claim
+    /// about where the usage came from.
+    private func elsewhereLine(_ note: UsageElsewhere, info: ProviderInfo) -> some View {
+        let tool = info.connection.toolName
+        return HStack(spacing: 6) {
+            Image(systemName: "laptopcomputer.and.iphone")
+                .foregroundStyle(.secondary)
+            Text(note.summary(tool: tool))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.subheadline)
+        .padding(.top, 2)
+        .help("Compares the session figure \(info.displayName) reports with the newest line in this Mac's \(tool) transcripts. It says what this Mac did, not where the rest came from.")
+        .accessibilityLabel(note.summary(tool: tool))
     }
 
     /// "12 pts above an even pace" — where the figure sits against the time

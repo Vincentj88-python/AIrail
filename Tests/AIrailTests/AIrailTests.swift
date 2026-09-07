@@ -863,6 +863,7 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(first.days[5].usage.tokens.total, 5)
         XCTAssertEqual(first.hours.last?.usage.tokens.total, 10)
         XCTAssertEqual(first.week.tokens.total, 15)
+        XCTAssertEqual(first.newestEventDate.map { $0.timeIntervalSince1970.rounded() }, now.timeIntervalSince1970.rounded(), "the newest counted line is when this Mac last did something")
 
         // Append: only the new line should be read and added.
         let handle = try FileHandle(forWritingTo: file)
@@ -929,6 +930,48 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(UsageFormatting.spokenUsage(s, now: now), "limit reached, resets in " + UsageFormatting.duration(hours: 72))
         XCTAssertEqual(UsageFormatting.spokenUsage(key, now: now), "100 percent used")
         XCTAssertEqual(UsageFormatting.spokenUsage(nil, now: now), "no data")
+    }
+
+    /// "Used elsewhere": the session figure moving while this Mac's transcripts
+    /// didn't. Rule A needs usage in a window with no local line since it
+    /// began; rule B needs a rise of three points across two reads with the
+    /// newest local line unchanged; local activity or a new window resets both.
+    func testUsedElsewhereRules() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        func snapshot(_ percent: Double, newest: Date?, activity: Bool = true) -> UsageSnapshot {
+            var s = UsageSnapshot.empty(providerId: "claude", displayName: "Claude", status: .ok)
+            s.sessionPercent = percent
+            s.resetsAt = start.addingTimeInterval(5 * 3600)
+            s.sessionWindowLength = 5 * 3600
+            s.detail.newestLocalEvent = newest
+            if activity { s.detail.week.messages = 12 }
+            return s
+        }
+        var watch: UsageElsewhere.Watch?
+        // Rule A: usage in the window, the last local line before it began.
+        let quiet = UsageElsewhere.evaluate(snapshot(20, newest: start.addingTimeInterval(-3600)), watch: &watch, now: start.addingTimeInterval(1800))
+        XCTAssertEqual(quiet?.kind, .quietWindow)
+        XCTAssertEqual(quiet?.summary(tool: "Claude Code"), "No Claude Code activity on this Mac this session")
+        XCTAssertNil(UsageElsewhere.evaluate(snapshot(2, newest: start.addingTimeInterval(-3600)), watch: &watch, now: start.addingTimeInterval(1800)), "under three points is noise")
+        XCTAssertNil(UsageElsewhere.evaluate(snapshot(20, newest: nil, activity: false), watch: &watch, now: start.addingTimeInterval(1800)), "no transcripts read at all: nothing to say")
+
+        // Rule B: a rise across reads while the newest local line stays put.
+        watch = nil
+        let local = start.addingTimeInterval(600)
+        XCTAssertNil(UsageElsewhere.evaluate(snapshot(40, newest: local), watch: &watch, now: start.addingTimeInterval(700)), "local activity a minute ago keeps resetting the watch")
+        XCTAssertNil(UsageElsewhere.evaluate(snapshot(40, newest: local), watch: &watch, now: start.addingTimeInterval(1200)), "the first quiet read is the anchor")
+        XCTAssertNil(UsageElsewhere.evaluate(snapshot(42, newest: local), watch: &watch, now: start.addingTimeInterval(1260)), "two points is noise")
+        let rose = UsageElsewhere.evaluate(snapshot(45, newest: local), watch: &watch, now: start.addingTimeInterval(1320))
+        guard case .rose(let points, let since)? = rose?.kind else { return XCTFail("expected a rise, got \(String(describing: rose))") }
+        XCTAssertEqual(points, 5, accuracy: 0.001)
+        XCTAssertEqual(since, start.addingTimeInterval(1200))
+        XCTAssertTrue(rose?.summary(tool: "Codex", locale: Locale(identifier: "en_GB")).hasPrefix("Up 5 pts since ") == true)
+        XCTAssertNil(UsageElsewhere.evaluate(snapshot(46, newest: start.addingTimeInterval(1330)), watch: &watch, now: start.addingTimeInterval(1380)), "the Mac did something: start over")
+        XCTAssertNil(UsageElsewhere.evaluate(snapshot(30, newest: local), watch: &watch, now: start.addingTimeInterval(1440)), "a drop starts over too")
+        var stale = snapshot(60, newest: local)
+        stale.status = .stale
+        XCTAssertNil(UsageElsewhere.evaluate(stale, watch: &watch, now: start.addingTimeInterval(1500)))
+        XCTAssertNil(watch, "a read that isn't live clears the watch")
     }
 
     /// Pace is arithmetic on two live numbers and the clock: percent used

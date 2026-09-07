@@ -192,7 +192,10 @@ enum CodexUsage {
     ) -> UsageSnapshot {
         var detail = UsageDetail()
         if let transcripts {
-            detail = UsageDetail(hours: transcripts.hours, days: transcripts.days, week: transcripts.week)
+            detail = UsageDetail(
+                hours: transcripts.hours, days: transcripts.days, week: transcripts.week,
+                newestLocalEvent: transcripts.newestEventDate
+            )
         }
         return UsageSnapshot(
             providerId: providerId,

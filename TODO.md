@@ -71,6 +71,30 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Used elsewhere (2026-09-07)
+
+Block B. The session ring climbing while nothing ran on this Mac looked like
+a bug; it is a second Mac, the web app or the desktop app. `TranscriptScanner`
+regained `Summary.newestEventDate` (deleted in block A as unused, now kept per
+file and forwarded as `UsageDetail.newestLocalEvent` by the Claude and Codex
+snapshots). `UsageElsewhere.evaluate(_:watch:now:)` in UsageInsights is pure:
+rule A — usage ≥ 3 % in a session window with no counted local line since the
+window began (minus 2 min) → "No Claude Code activity on this Mac this
+session"; rule B — a rise ≥ 3 points across ≥ 2 reads while the newest local
+line stayed put → "Up 12 pts since 2:02 PM with no Claude Code activity on
+this Mac". Local activity within the last two minutes, a new window, or a drop
+resets the watch, and the anchor is the first *quiet* read (the figure can lag
+a local turn). Gated on `detail.hasActivity`, so a scanner pointed at the
+wrong folder (a `CLAUDE_CONFIG_DIR` elsewhere) never produces a claim, and on
+`.ok`. `ProviderManager.elsewhere` is published from the success path and
+cleared on disconnect; the HUD shows one `.subheadline` line under the pace
+with a `.help` stating exactly what is compared. Phrased as an observation
+about this Mac, never an attribution to a device. Verified on this Mac by the
+research: Claude Code writes assistant lines within the same second, and
+subagent transcripts live inside the scanner root, so local workflows don't
+false-positive. Cursor/Copilot/keyed/demo carry no `newestLocalEvent` and are
+naturally excluded. 84 green (+1, plus a scanner assertion).
+
 ## At the wall, lead with the time (2026-09-07)
 
 Block B. `UsageSnapshot.atLimitResetsAt` is the reset of a window that is

@@ -70,6 +70,74 @@ struct UsagePace: Sendable, Equatable {
     }
 }
 
+/// The session figure moving while this Mac's tool wrote nothing — a second
+/// Mac, the web app, the desktop app. Two rules on two live reads, phrased
+/// as an observation about this Mac, never an attribution to another device.
+struct UsageElsewhere: Sendable, Equatable {
+    enum Kind: Sendable, Equatable {
+        /// The window has usage but no counted local line since it began.
+        case quietWindow
+        /// The figure rose by `points` since `since` while the newest local line stayed put.
+        case rose(points: Double, since: Date)
+    }
+    let kind: Kind
+
+    /// What one account's reads have established so far; reset whenever the
+    /// window changes, the Mac does something, or the figure drops.
+    struct Watch: Sendable, Equatable {
+        var window: Date?
+        var newestLocal: Date?
+        var anchorPercent: Double
+        var anchorDate: Date
+        var reads = 0
+    }
+
+    /// Only providers whose history comes from local transcripts, and only
+    /// while those transcripts are being read at all (`hasActivity`), so a
+    /// scanner pointed at the wrong folder never produces a claim.
+    static func evaluate(_ snapshot: UsageSnapshot, watch: inout Watch?, now: Date = Date()) -> UsageElsewhere? {
+        guard snapshot.status == .ok, let percent = snapshot.sessionPercent, let window = snapshot.sessionWindow else {
+            watch = nil
+            return nil
+        }
+        let newest = snapshot.detail.newestLocalEvent
+        let fresh = Watch(window: snapshot.resetsAt, newestLocal: newest, anchorPercent: percent, anchorDate: now)
+        // The Mac just did something: the figure may still be catching up
+        // with it, so nothing is observed and the next quiet read anchors.
+        if let newest, newest > now.addingTimeInterval(-120) {
+            watch = fresh
+            return nil
+        }
+        var current = watch ?? fresh
+        if current.reads == 0 || current.window != snapshot.resetsAt || current.newestLocal != newest || percent < current.anchorPercent {
+            current = fresh
+        }
+        current.reads += 1
+        watch = current
+        guard snapshot.detail.hasActivity else { return nil }
+        if percent >= 3, newest.map({ $0 < window.start.addingTimeInterval(-120) }) ?? true {
+            return UsageElsewhere(kind: .quietWindow)
+        }
+        let rise = percent - current.anchorPercent
+        if current.reads >= 2, rise >= 3 {
+            return UsageElsewhere(kind: .rose(points: rise, since: current.anchorDate))
+        }
+        return nil
+    }
+
+    /// "No Claude Code activity on this Mac this session", or
+    /// "Up 12 pts since 2:02 PM with no Claude Code activity on this Mac".
+    func summary(tool: String, locale: Locale = .autoupdatingCurrent) -> String {
+        switch kind {
+        case .quietWindow:
+            return "No \(tool) activity on this Mac this session"
+        case .rose(let points, let since):
+            let time = since.formatted(Date.FormatStyle(locale: locale).hour().minute())
+            return "Up \(Int(points.rounded())) pts since \(time) with no \(tool) activity on this Mac"
+        }
+    }
+}
+
 extension UsageFormatting {
     /// "30m", "2h 24m", "3d 4h" — a span the way the Battery pane writes one.
     /// Hours and minutes under two days, days and hours beyond; never "0m",

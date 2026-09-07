@@ -27,6 +27,10 @@ final class ProviderManager: ObservableObject {
     /// Whether the Mac has a network path. Without one, reads aren't tried:
     /// every account keeps its last numbers as stale under an "offline" note.
     @Published private(set) var isOnline = true
+    /// The "used elsewhere" observation per account, when the session figure
+    /// moved while this Mac's tool wrote nothing.
+    @Published private(set) var elsewhere: [String: UsageElsewhere] = [:]
+    private var elsewhereWatches: [String: UsageElsewhere.Watch] = [:]
 
     private let settings: AppSettings
     private let notifier: UsageNotifier
@@ -205,6 +209,8 @@ final class ProviderManager: ObservableObject {
         failureStreak[providerId] = nil
         percentHistory[providerId] = nil
         sampleWindows[providerId] = nil
+        elsewhere[providerId] = nil
+        elsewhereWatches[providerId] = nil
         notifier.forget(providerId)
         if isShowingDemo {
             Task { await refreshAll() }
@@ -381,6 +387,7 @@ final class ProviderManager: ObservableObject {
             backoffUntil[providerId] = nil
             failureStreak[providerId] = nil
             recordSample(snapshot)
+            noteElsewhere(snapshot)
             await notifier.consider(snapshot, enabled: settings.notificationsEnabled)
         } catch {
             guard stillWanted(providerId) else { return }
@@ -435,6 +442,14 @@ final class ProviderManager: ObservableObject {
             until = max(until, retryAfter)
         }
         backoffUntil[providerId] = until
+    }
+
+    private func noteElsewhere(_ snapshot: UsageSnapshot) {
+        let id = snapshot.providerId
+        var watch = elsewhereWatches[id]
+        let note = UsageElsewhere.evaluate(snapshot, watch: &watch, now: clock())
+        elsewhereWatches[id] = watch
+        if elsewhere[id] != note { elsewhere[id] = note }
     }
 
     private func recordSample(_ snapshot: UsageSnapshot) {

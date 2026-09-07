@@ -34,6 +34,9 @@ actor TranscriptScanner {
         var hours: [UsageBucket]
         var days: [UsageBucket]
         var week: UsageAggregate
+        /// When the newest counted line was written — the last moment this
+        /// Mac's tool did anything, for the "used elsewhere" observation.
+        var newestEventDate: Date? = nil
     }
 
     private struct FileState {
@@ -42,6 +45,7 @@ actor TranscriptScanner {
         var days: [Date: UsageAggregate] = [:]
         var seenKeys: Set<String> = []
         var context = TranscriptContext()
+        var newestEvent: Date? = nil
     }
 
     private let roots: [URL]
@@ -76,6 +80,7 @@ actor TranscriptScanner {
         var hours: [Date: UsageAggregate] = [:]
         var days: [Date: UsageAggregate] = [:]
         var week = UsageAggregate()
+        var newest: Date?
         for state in files.values {
             for (hour, usage) in state.hours where hour >= hourCutoff {
                 hours[hour, default: UsageAggregate()].merge(usage)
@@ -84,11 +89,15 @@ actor TranscriptScanner {
                 days[day, default: UsageAggregate()].merge(usage)
                 week.merge(usage)
             }
+            if let date = state.newestEvent, newest.map({ date > $0 }) ?? true {
+                newest = date
+            }
         }
         return Summary(
             hours: UsageBucketing.series(hours, count: hourCount, component: .hour, endingAt: now, calendar: calendar),
             days: UsageBucketing.series(days, count: dayCount, component: .day, endingAt: now, calendar: calendar),
-            week: week
+            week: week,
+            newestEventDate: newest
         )
     }
 
@@ -189,6 +198,9 @@ actor TranscriptScanner {
             }
         }
         guard !contribution.isEmpty else { return }
+        if state.newestEvent.map({ event.date > $0 }) ?? true {
+            state.newestEvent = event.date
+        }
 
         let hour = UsageBucketing.floor(event.date, to: .hour, calendar: calendar)
         let day = calendar.startOfDay(for: event.date)
