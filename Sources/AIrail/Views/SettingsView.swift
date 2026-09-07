@@ -58,9 +58,13 @@ private struct GeneralPane: View {
             } footer: {
                 Text("A macOS notification when an account passes 75% or 90%, and when a session window resets so you can batch heavy work.")
             }
+            Section {
+                // The commit only appears on a release.sh build (see BuildInfo).
+                LabeledContent("Version", value: BuildInfo.label)
+            }
         }
         .formStyle(.grouped)
-        .frame(height: 320)
+        .frame(height: 380)
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

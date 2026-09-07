@@ -117,6 +117,8 @@ git tag v0.2.1 && git push origin v0.2.1
 gh release create v0.2.1 dist/AIrail-0.2.1.dmg --title "v0.2.1" --notes "…"
 ```
 
+`release.sh` signs the app with the hardened runtime, a secure timestamp and no entitlements (so no `get-task-allow`), and refuses to package it if any of the three is missing. The same script runs on GitHub's macOS runners from `.github/workflows/release.yml`; its build-provenance attestation (`gh attestation verify`) starts working once the repo is public.
+
 Users then see the update on their next check and download the new DMG. (Seamless one-click, in-place updates — no re-download — come with [Sparkle](https://sparkle-project.org) once the app is notarized and public; the checker is the interim.)
 
 ## Tests

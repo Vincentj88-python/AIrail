@@ -59,9 +59,7 @@ enum UpdateChecker {
         }
     }
 
-    static var currentVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
-    }
+    static var currentVersion: String { BuildInfo.version }
 
     private static func latestRelease() async throws -> Release? {
         var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!)

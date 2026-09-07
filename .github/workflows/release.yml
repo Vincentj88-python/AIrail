@@ -1,0 +1,79 @@
+# Release build on GitHub's macOS runners: the same scripts/release.sh as a
+# local release, plus a build-provenance attestation so anyone can check that a
+# DMG really came out of this repo's Actions run:
+#
+#     gh attestation verify dist/AIrail-<version>.dmg --owner Vincentj88-python
+#
+# GitHub only issues attestations for public repositories (private ones need
+# Enterprise Cloud), so that step is guarded and simply skips while the repo
+# is private. Draft: run by hand from a v* tag until the two secrets exist;
+# switch the trigger to `push: tags: ['v*']` at go-public.
+#
+# Secrets: AIRAIL_SIGNING_P12 — the "AIrail Dev" identity exported from
+# Keychain Access as .p12, base64-encoded — and AIRAIL_SIGNING_P12_PASSWORD.
+# With a Developer ID, export that identity instead; release.sh already signs
+# with the hardened runtime, so only the notarization step is new.
+name: Release
+
+on:
+  workflow_dispatch:
+  # push:
+  #   tags: ['v*']
+
+permissions:
+  contents: write       # gh release create
+  id-token: write       # attestation signing
+  attestations: write
+
+jobs:
+  release:
+    # macos-15 carries Xcode 16 (Swift 6); macos-14 stopped at Xcode 15.
+    runs-on: macos-15
+    steps:
+      - name: Refuse to release from anything but a tag
+        if: github.ref_type != 'tag'
+        run: |
+          echo "Run this workflow from a v* tag, not from $GITHUB_REF"
+          exit 1
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # release.sh reads the version from the nearest tag
+
+      - name: Import the signing identity into a throwaway keychain
+        env:
+          P12_BASE64: ${{ secrets.AIRAIL_SIGNING_P12 }}
+          P12_PASSWORD: ${{ secrets.AIRAIL_SIGNING_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [ -n "$P12_BASE64" ] || { echo "AIRAIL_SIGNING_P12 is not set in the repo secrets"; exit 1; }
+          KEYCHAIN="$RUNNER_TEMP/airail-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          P12="$RUNNER_TEMP/signing.p12"
+          echo "$P12_BASE64" | base64 --decode > "$P12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$P12" -P "$P12_PASSWORD" -f pkcs12 -k "$KEYCHAIN" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN"
+          rm -f "$P12"
+
+      - name: Build, sign and package
+        run: ./scripts/release.sh
+
+      - name: Attest build provenance (public repo only)
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.dmg
+
+      - name: Create the draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.dmg --draft --title "$GITHUB_REF_NAME" --generate-notes
+
+      - name: Remove the throwaway keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/airail-signing.keychain-db" 2>/dev/null || true

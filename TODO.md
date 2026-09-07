@@ -1,9 +1,99 @@
 # AIrail — TODO / where we left off
 
-_Last updated: 2026-09-03. **v0.2.0 is feature-complete and all pushed** to the
+_Last updated: 2026-09-06. **v0.2.0 is feature-complete and all pushed** to the
 (now private) GitHub repo; running from `/Applications` on this Mac. Below is
 where we left off; the dated sections further down are the running log of how
 each piece was built and why._
+
+## Roadmap research (2026-09-05) — resume here
+
+An 81-agent research run (competition scout, codebase scout, ten ideation
+lenses, one skeptical macOS engineer per idea, a critic, a synthesis) produced
+**`ROADMAP.md`** in this repo: 62 verified ideas in three tiers with build notes,
+a cut list, the pricing recommendation and nine decisions. Same content as a
+page: https://claude.ai/code/artifact/1b4a8ab6-0cea-47cc-989b-4fa07e31d771
+
+**Decisions taken 2026-09-06:** Vincent went with every pick in `ROADMAP.md`
+(sandbox later; names-only redaction Bool instead of a demo face; merge Notch
+and Island into one "Top" position; hold the hardened-runtime hotfix for
+v0.3.0; $12 soft licence after the launch; Pro labels only on the recap card
+and work/personal accounts; v0.3.0 = blocks A + B + E plus the first three C
+items; usage ledger on disk yes; stay dark-only). **Constraint:** the Apple
+Developer ID waits until AIrail has earned the $99, so the go-public step is a
+free soft launch with a Sponsors goal first, notarization + licence + Show HN
+after (see "Order of work" in `ROADMAP.md`). Work started on branch
+`tier1-block-a`.
+
+Things established that reverse or extend earlier notes:
+
+- **Hide-on-screen-share is dead.** Apple documents `NSWindow.sharingType =
+  .none` as "a legacy constant that macOS no longer uses … Don't use this value
+  to hide or omit content from being captured" (checked 2026-09-05). Cut.
+- **The redaction "demo face" is cut.** `.redacted(reason: .privacy)` only
+  affects Text/Image; rings, share bars and chart bars are Shapes and keep
+  drawing real percentages. Replacement if wanted: one names-only Bool.
+- **Real defects in v0.2.0 that README contradicts:** the default `URLSession`
+  disk cache holds bearer tokens and cookies ("keeps no tokens on disk" is
+  false); `RailHairline`'s 20 Hz `TimelineView` ≈ 4.8 % CPU idle; the shipped
+  DMG has `get-task-allow`; `ModelPricing` makes an undisclosed weekly
+  openrouter.ai call (principle 3) and the demo card prints dollars from it;
+  `UpdateChecker` can run a modal `NSAlert` from the background timer; the
+  first notification after launch is dropped; 403 HTML reads as "sign-in
+  expired". All are tier 1 block A/B items.
+- **Platforms changed under the parsers (Apr–Aug 2026):** Copilot monthly
+  plans bill AI credits in dollars plus session/weekly lanes (AIrail reads the
+  legacy `quota_snapshots` shape); Cursor split included usage into two pools;
+  Codex Plus regained a 5-hour window while Pro is exempt (missing window ≠
+  0 %); consumer Gemini shut, replaced by Antigravity; OpenRouter has an
+  Analytics API. "Read the 2026 meters" is tier 1 block B.
+- **CodexBar** is at 69 providers with forecasting, widgets, 365-day history,
+  multi-account, CLI/hooks, iCloud sync. README's comparison table is stale;
+  replace it with a "why the edge" story. The notch is not a moat (6+ apps);
+  the edge rail + per-display placement + ambient hairline is the unique
+  surface. Biggest gap: private, un-notarized, not on Homebrew. macOS 15
+  removed the Control-click "Open" bypass README step 1 describes.
+- **Money:** do not charge $2 (Dodo's fixed fee eats a quarter of it) and do
+  not charge monthly. Buy the Developer ID this week; ship v0.3.0 free, MIT,
+  notarized, public, with Sponsors and a personal Homebrew tap; then a $12
+  one-time soft licence via Dodo Payments (public licence endpoints, no
+  secret) in the first post-launch release. Privacy and everything already
+  shipped stay free. Details and fee table in `ROADMAP.md`.
+- **v0.3.0 launch scope (my pick):** tier 1 blocks A + B + E plus the first
+  three block C items (hairline-only island, Core Animation hairline, ambient
+  headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
+
+## Hardened, attested builds (2026-09-06)
+
+- **What was wrong:** `release.sh` let `xcodebuild build` do the signing, and
+  Xcode injects `com.apple.security.get-task-allow` for any non-distribution
+  identity (self-signed included), so the shipped 0.2.0 has `flags=0x0(none)`
+  and any same-user process can attach a debugger. Confirmed with
+  `codesign -dvv` on `/Applications/AIrail.app`.
+- **Fix in `scripts/release.sh`:** the build is only ad-hoc signed now;
+  PlistBuddy stamps `AIrailCommit` (`git describe --always --dirty`) into
+  Info.plist; then one `codesign --force --options runtime --timestamp --sign
+  "AIrail Dev"` with no `--entitlements` — a re-sign carries none over, so
+  get-task-allow is gone (proved on an ad-hoc scratch binary). Three asserts
+  fail the build: no get-task-allow, `flags=0x10000(runtime)`, a `Timestamp=`
+  line. The timestamp is a public RFC 3161 request to Apple, no account needed;
+  if it ever refuses, drop the flag and its assert together. pbxproj untouched,
+  so Debug still attaches. Not run here (private key + TSA): the first
+  `./scripts/release.sh` is the smoke test.
+- **Settings › General** gained a "Version" row (`Models/BuildInfo.swift`):
+  `0.2.0 (0a744d2)` on a release build, bare `0.2.0` from Xcode — the commit
+  only when the plist key exists. Moves to the Privacy pane if that ships.
+- **`.github/workflows/release.yml`** (draft, `workflow_dispatch` only):
+  macos-15 (Xcode 16; macos-14 stopped at 15), p12 into a throwaway keychain,
+  `release.sh`, `attest-build-provenance` guarded on `!repository.private`
+  (GitHub only attests public repos), draft release via `gh`. At go-public:
+  add the two secrets, switch the trigger to `push: tags: ['v*']`.
+- **By hand, Vincent, when cutting v0.3.0 (decision 4: not before):**
+  re-create "AIrail Dev" with 10-year validity — Keychain Access › Certificate
+  Assistant › Create a Certificate…, Self Signed Root, Code Signing, "Let me
+  override defaults", 3650 days; delete the 2027 one first so `--sign "AIrail
+  Dev"` isn't ambiguous. One Claude Keychain re-prompt follows (new designated
+  requirement); the timestamp keeps old signatures valid past 2027-09-02.
+- 45 tests green (+1, `BuildInfo.label`).
 
 ## Where things stand (resume here)
 

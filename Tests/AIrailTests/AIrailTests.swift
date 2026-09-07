@@ -740,6 +740,13 @@ final class AIrailTests: XCTestCase {
         XCTAssertFalse(UpdateChecker.isNewer("0.1.9", than: "0.2.0"))
     }
 
+    func testBuildLabelShowsCommitOnlyWhenStamped() {
+        XCTAssertEqual(BuildInfo.label(version: "0.2.0", commit: nil), "0.2.0")
+        XCTAssertEqual(BuildInfo.label(version: "0.2.0", commit: "0a744d2"), "0.2.0 (0a744d2)")
+        XCTAssertEqual(BuildInfo.label(version: "0.2.0", commit: "0a744d2-dirty"), "0.2.0 (0a744d2-dirty)")
+        XCTAssertNil(BuildInfo.commit, "only release.sh stamps AIrailCommit; a test host has none")
+    }
+
     // MARK: Helpers
 
     private static func json(_ text: String) throws -> JSONObject {
