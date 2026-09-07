@@ -122,9 +122,9 @@ To publish a new version:
 # check ModelPricing.table against the vendors' price pages (the API-value
 # estimate ships as a table, nothing is fetched), bump MARKETING_VERSION in
 # the app target, commit, then:
-git tag v0.2.1 && git push origin v0.2.1
-./scripts/release.sh                       # builds dist/AIrail-0.2.1.dmg
-gh release create v0.2.1 dist/AIrail-0.2.1.dmg --title "v0.2.1" --notes "…"
+git tag v0.3.0 && git push origin v0.3.0
+./scripts/release.sh                       # builds dist/AIrail-0.3.0.dmg
+gh release create v0.2.1 dist/AIrail-0.3.0.dmg --title "v0.2.1" --notes "…"
 ```
 
 `release.sh` signs the app with the hardened runtime, a secure timestamp and no entitlements (so no `get-task-allow`), and refuses to package it if any of the three is missing. The same script runs on GitHub's macOS runners from `.github/workflows/release.yml`; its build-provenance attestation (`gh attestation verify`) starts working once the repo is public.
