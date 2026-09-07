@@ -215,6 +215,87 @@ final class ProviderManagerTests: XCTestCase {
         XCTAssertNil(manager.snapshots["claude"]?.sessionPercent, "expiry survives a re-mark from the last live read")
     }
 
+    // MARK: Ledger
+
+    @MainActor
+    func testTheLedgerRestoresTheLastNumbersAndThePace() async throws {
+        let store = makeStore()
+        let clock = TestClock()
+        let resets = clock.now.addingTimeInterval(4 * 3600)
+        let fake = FakeProvider(id: "claude", results: [
+            .success(Self.snapshot("claude", percent: 40, resetsAt: resets)),
+            .success(Self.snapshot("claude", percent: 50, resetsAt: resets)),
+        ])
+        let (manager, settings) = try makeManager([fake], clock: clock, store: store)
+        settings.connect("claude")
+        await manager.refresh("claude")
+        clock.advance(by: 600)
+        await manager.refresh("claude")
+        XCTAssertNotNil(manager.projection(for: "claude"))
+        try await settle(store, "claude", present: true)
+        let loaded = await store.load("claude")
+        let saved = try XCTUnwrap(loaded)
+        XCTAssertEqual(saved.lastSnapshot?.sessionPercent, 50)
+        XCTAssertEqual(saved.percentSamples.count, 2)
+
+        // A relaunch: the numbers come back as stale, and the pace with them.
+        let again = FakeProvider(id: "claude", results: [.success(Self.snapshot("claude", percent: 60, resetsAt: resets))])
+        let (relaunched, settings2) = try makeManager([again], clock: clock, store: store)
+        settings2.connect("claude")
+        await relaunched.restore()
+        XCTAssertEqual(relaunched.snapshots["claude"]?.status, .stale)
+        XCTAssertEqual(relaunched.snapshots["claude"]?.sessionPercent, 50)
+        XCTAssertNil(relaunched.projection(for: "claude"), "no pace is claimed from stale numbers")
+        clock.advance(by: 600)
+        await relaunched.refresh("claude")
+        XCTAssertEqual(relaunched.snapshots["claude"]?.status, .ok)
+        XCTAssertNotNil(relaunched.projection(for: "claude"), "the restored samples make the first fresh read a pace, not a two-minute wait")
+        try await settle(store, "claude", present: true)
+
+        // A relaunch whose first read fails keeps the numbers instead of blanking.
+        let failing = FakeProvider(id: "claude", results: [.failure(.temporarilyUnavailable(tool: "Claude Code"))])
+        let (unlucky, settings3) = try makeManager([failing], clock: clock, store: store)
+        settings3.connect("claude")
+        await unlucky.restore()
+        await unlucky.refresh("claude")
+        XCTAssertEqual(unlucky.snapshots["claude"]?.status, .stale)
+        XCTAssertEqual(unlucky.snapshots["claude"]?.sessionPercent, 60, "the last real numbers, from the ledger")
+
+        unlucky.disconnect("claude")
+        try await settle(store, "claude", present: false)
+    }
+
+    @MainActor
+    func testAFeedlessAccountGetsItsChartFromDailyLevels() async throws {
+        let store = makeStore()
+        let clock = TestClock()
+        let resets = clock.now.addingTimeInterval(20 * 86400)
+        func level(_ used: Double) -> UsageSnapshot {
+            var s = UsageSnapshot.empty(providerId: "copilot", displayName: "Copilot", status: .ok)
+            s.weeklyUsed = used
+            s.weeklyLimit = 1500
+            s.weeklyPercent = used / 15
+            s.periodLabel = "monthly"
+            s.weeklyResetsAt = resets
+            return s
+        }
+        let fake = FakeProvider(id: "copilot", results: [.success(level(100)), .success(level(130)), .success(level(145))])
+        let (manager, settings) = try makeManager([fake], clock: clock, store: store)
+        settings.connect("copilot")
+        await manager.refresh("copilot")
+        XCTAssertTrue(manager.snapshots["copilot"]?.detail.days.isEmpty == true, "one sample is no chart")
+        clock.advance(by: 86400)
+        await manager.refresh("copilot")
+        let days = try XCTUnwrap(manager.snapshots["copilot"]?.detail.days)
+        XCTAssertEqual(days.count, 7)
+        XCTAssertEqual(days.last?.usage.messages, 30, "today minus yesterday")
+        clock.advance(by: 86400)
+        await manager.refresh("copilot")
+        XCTAssertEqual(manager.snapshots["copilot"]?.detail.days.last?.usage.messages, 15)
+        XCTAssertEqual(manager.snapshots["copilot"]?.detail.week.messages, 45)
+        XCTAssertTrue(manager.snapshots["copilot"]?.detail.hasActivity == true)
+    }
+
     // MARK: Network and sleep
 
     @MainActor
@@ -573,12 +654,32 @@ final class ProviderManagerTests: XCTestCase {
     private func makeManager(
         _ providers: [FakeProvider],
         inbox: NotificationInbox = NotificationInbox(),
-        clock: TestClock = TestClock()
+        clock: TestClock = TestClock(),
+        store: UsageStore? = nil
     ) throws -> (ProviderManager, AppSettings) {
         let defaults = try makeDefaults()
         let settings = AppSettings(defaults: defaults)
         let notifier = try makeNotifier(inbox, clock: clock, defaults: defaults)
-        return (ProviderManager(settings: settings, providers: providers, notifier: notifier, clock: { clock.now }), settings)
+        return (ProviderManager(settings: settings, providers: providers, notifier: notifier, clock: { clock.now }, store: store), settings)
+    }
+
+    /// A ledger store in a folder of its own, removed at teardown.
+    @MainActor
+    private func makeStore() -> UsageStore {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("airail-ledger-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        return UsageStore(directory: directory)
+    }
+
+    /// The ledger is written off the main actor; wait for it (or for it to go).
+    @MainActor
+    private func settle(_ store: UsageStore, _ id: String, present: Bool) async throws {
+        for _ in 0..<100 {
+            if (await store.load(id) != nil) == present { return }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTFail("the ledger for \(id) never became \(present ? "present" : "absent")")
     }
 
     /// A notifier whose system side is `inbox`, on its own throwaway

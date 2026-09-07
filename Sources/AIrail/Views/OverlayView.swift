@@ -32,7 +32,8 @@ struct OverlayView: View {
             UsageChartSection(
                 detail: snapshot?.detail ?? UsageDetail(),
                 color: info.color,
-                sessionWindow: sessionWindow(snapshot: snapshot)
+                sessionWindow: sessionWindow(snapshot: snapshot),
+                unitLabel: snapshot?.unitLabel ?? "requests"
             )
             if let detail = snapshot?.detail, detail.hasActivity {
                 if !detail.byModel.isEmpty || !detail.byProject.isEmpty {

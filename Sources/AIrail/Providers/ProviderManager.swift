@@ -34,6 +34,9 @@ final class ProviderManager: ObservableObject {
 
     private let settings: AppSettings
     private let notifier: UsageNotifier
+    /// What each account keeps on disk between launches; nil in tests that don't care.
+    private let store: UsageStore?
+    private var ledgers: [String: UsageLedger] = [:]
     /// The wall clock, so tests can move time instead of waiting out a backoff.
     private let clock: () -> Date
     private var demoEngines: [String: MockUsageEngine] = [:]
@@ -63,12 +66,14 @@ final class ProviderManager: ObservableObject {
         settings: AppSettings,
         providers: [any UsageProviding] = ProviderManager.makeProviders(),
         notifier: UsageNotifier = UsageNotifier(),
-        clock: @escaping () -> Date = { Date() }
+        clock: @escaping () -> Date = { Date() },
+        store: UsageStore? = UsageStore()
     ) {
         self.settings = settings
         self.providers = providers
         self.notifier = notifier
         self.clock = clock
+        self.store = store
         allProviderInfos = providers.map {
             ProviderInfo(
                 id: $0.id,
@@ -184,8 +189,9 @@ final class ProviderManager: ObservableObject {
         }
         let wasDemo = isShowingDemo
         settings.connect(providerId)
-        lastLive[providerId] = snapshot
-        snapshots[providerId] = snapshot
+        let published = recorded(snapshot)
+        lastLive[providerId] = published
+        snapshots[providerId] = published
         lastErrors[providerId] = nil
         backoffUntil[providerId] = nil
         failureStreak[providerId] = nil
@@ -211,6 +217,8 @@ final class ProviderManager: ObservableObject {
         sampleWindows[providerId] = nil
         elsewhere[providerId] = nil
         elsewhereWatches[providerId] = nil
+        ledgers[providerId] = nil
+        if let store { Task { await store.delete(providerId) } }
         notifier.forget(providerId)
         if isShowingDemo {
             Task { await refreshAll() }
@@ -220,9 +228,32 @@ final class ProviderManager: ObservableObject {
     // MARK: Refresh
 
     func start() {
-        Task { await refreshAll() }
+        Task {
+            await restore()
+            await refreshAll()
+        }
         restartTimer(interval: settings.refreshInterval)
         watchNetworkAndSleep()
+    }
+
+    /// What the ledgers kept: each connected account's last real numbers
+    /// come back as stale (so a first read that fails leaves numbers, not a
+    /// blank), and its pace samples come back so the first fresh read is a
+    /// pace rather than a two-minute wait.
+    func restore() async {
+        guard let store else { return }
+        for info in connectedProviderInfos {
+            guard let ledger = await store.load(info.id) else { continue }
+            ledgers[info.id] = ledger
+            if let saved = ledger.lastSnapshot, snapshots[info.id] == nil {
+                lastLive[info.id] = saved
+                snapshots[info.id] = expiring(saved.marking(.stale), for: info.id)
+            }
+            if !ledger.percentSamples.isEmpty {
+                percentHistory[info.id] = ledger.percentSamples.map { ($0.date, $0.percent) }
+                sampleWindows[info.id] = ledger.sampleWindow
+            }
+        }
     }
 
     /// Quitting: the timer stops, and any reset alert handed to the system
@@ -381,14 +412,15 @@ final class ProviderManager: ObservableObject {
         do {
             let snapshot = try await provider.fetchUsage()
             guard stillWanted(providerId) else { return }
-            lastLive[providerId] = snapshot
-            snapshots[providerId] = snapshot
+            recordSample(snapshot)
+            let published = recorded(snapshot)
+            lastLive[providerId] = published
+            snapshots[providerId] = published
             lastErrors[providerId] = nil
             backoffUntil[providerId] = nil
             failureStreak[providerId] = nil
-            recordSample(snapshot)
-            noteElsewhere(snapshot)
-            await notifier.consider(snapshot, enabled: settings.notificationsEnabled)
+            noteElsewhere(published)
+            await notifier.consider(published, enabled: settings.notificationsEnabled)
         } catch {
             guard stillWanted(providerId) else { return }
             let failure = (error as? ConnectionError) ?? .unreadable(error.localizedDescription)
@@ -442,6 +474,33 @@ final class ProviderManager: ObservableObject {
             until = max(until, retryAfter)
         }
         backoffUntil[providerId] = until
+    }
+
+    /// Folds a successful read into the account's ledger and hands back what
+    /// to publish: the read itself, or — for an account with no per-request
+    /// feed (Copilot) — the read with a daily chart derived from the levels
+    /// the ledger has sampled. The write happens off the main actor.
+    private func recorded(_ snapshot: UsageSnapshot) -> UsageSnapshot {
+        let id = snapshot.providerId
+        let now = clock()
+        var ledger = ledgers[id] ?? UsageLedger()
+        var published = snapshot
+        if snapshot.detail.days.isEmpty, snapshot.weeklyUsed != nil {
+            ledger.recordLevel(snapshot, now: now)
+            let days = ledger.derivedDays(count: 7, now: now)
+            if !days.isEmpty {
+                published.detail.days = days
+                published.detail.week = days.reduce(into: UsageAggregate()) { $0.merge($1.usage) }
+            }
+        }
+        let samples = (percentHistory[id] ?? []).map { PercentSample(date: $0.date, percent: $0.percent) }
+        ledger.record(published, samples: samples, window: sampleWindows[id], now: now)
+        ledgers[id] = ledger
+        if let store {
+            let copy = ledger
+            Task { try? await store.save(copy, for: id) }
+        }
+        return published
     }
 
     private func noteElsewhere(_ snapshot: UsageSnapshot) {

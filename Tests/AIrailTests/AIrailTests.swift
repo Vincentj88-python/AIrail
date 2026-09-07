@@ -936,6 +936,68 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(UsageFormatting.spokenUsage(nil, now: now), "no data")
     }
 
+    /// The ledger keeps counts, never who is signed in, and comes back equal.
+    func testUsageLedgerRoundTripsWithoutTheAccount() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("airail-ledger-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = UsageStore(directory: directory)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var snapshot = UsageSnapshot.empty(providerId: "claude", displayName: "Claude", status: .ok)
+        snapshot.account = "v@example.com"
+        snapshot.sessionPercent = 42
+        snapshot.plan = "Max"
+        snapshot.lastUpdated = now // ISO 8601 on disk keeps whole seconds
+        var usage = UsageAggregate()
+        usage.tokens = TokenSplit(input: 10)
+        usage.models = ["m": 10]
+        usage.splits = [UsageKey(model: "m", project: "p"): TokenSplit(input: 10)]
+        snapshot.detail.days = [UsageBucket(start: Calendar.current.startOfDay(for: now), usage: usage)]
+
+        var ledger = UsageLedger()
+        ledger.record(snapshot, samples: [PercentSample(date: now, percent: 42)], window: now, now: now)
+        XCTAssertNil(ledger.lastSnapshot?.account, "who is signed in never lands on disk")
+        XCTAssertEqual(ledger.lastSnapshot?.sessionPercent, 42)
+        try await store.save(ledger, for: "claude")
+        let reloaded = await store.load("claude")
+        let loaded = try XCTUnwrap(reloaded)
+        XCTAssertEqual(loaded, ledger)
+        XCTAssertEqual(loaded.days.first?.usage.splits[UsageKey(model: "m", project: "p")]?.total, 10)
+        let text = try String(contentsOf: directory.appending(path: "claude.json"), encoding: .utf8)
+        XCTAssertFalse(text.contains("example.com"))
+        await store.delete("claude")
+        let afterDelete = await store.load("claude")
+        XCTAssertNil(afterDelete)
+    }
+
+    /// Copilot has no per-request feed: its chart is the day-to-day difference
+    /// of the level AIrail sampled, only across consecutive days, with a
+    /// reset making the day's level its usage.
+    func testFeedlessLevelsBecomeDailyBuckets() throws {
+        let calendar = Calendar.current
+        let day0 = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_800_000_000))
+        func day(_ n: Int) throws -> Date { try XCTUnwrap(calendar.date(byAdding: .day, value: n, to: day0)) }
+        func level(_ used: Double, resets: Int = 1) throws -> UsageSnapshot {
+            var s = UsageSnapshot.empty(providerId: "copilot", displayName: "Copilot", status: .ok)
+            s.weeklyUsed = used
+            s.weeklyResetsAt = try day(20 + resets)
+            return s
+        }
+        var ledger = UsageLedger()
+        XCTAssertTrue(ledger.derivedDays(count: 7, now: try day(0)).isEmpty)
+        ledger.recordLevel(try level(100), now: try day(0))
+        XCTAssertTrue(ledger.derivedDays(count: 7, now: try day(0)).isEmpty, "one sample is no chart")
+        ledger.recordLevel(try level(130), now: try day(1))
+        XCTAssertEqual(ledger.derivedDays(count: 7, now: try day(1)).last?.usage.messages, 30)
+        ledger.recordLevel(try level(150), now: try day(3)) // day 2 missed: AIrail wasn't running
+        XCTAssertEqual(ledger.derivedDays(count: 7, now: try day(3)).last?.usage.messages, 0, "a gap is never spread across the days that were missed")
+        ledger.recordLevel(try level(10, resets: 2), now: try day(4)) // the pool reset
+        XCTAssertEqual(ledger.derivedDays(count: 7, now: try day(4)).last?.usage.messages, 10, "after a reset the day's level is its usage")
+        ledger.recordLevel(try level(25, resets: 2), now: try day(4)) // a later read the same day replaces
+        XCTAssertEqual(ledger.derivedDays(count: 7, now: try day(4)).last?.usage.messages, 25)
+        XCTAssertEqual(ledger.levels.count, 4)
+    }
+
     /// The Screen Time header compares this week with the one before, only
     /// when there was one; Cursor's feed splits its fortnight the same way.
     func testWeekOverWeek() {

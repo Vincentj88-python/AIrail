@@ -1,6 +1,6 @@
 import Foundation
 
-enum UsageStatus: String, Sendable {
+enum UsageStatus: String, Sendable, Codable {
     case ok, demo, stale, error
 
     /// The word shown on the status pill. `ok` reads as "live" to a human.
@@ -12,11 +12,11 @@ enum UsageStatus: String, Sendable {
 /// The window a snapshot's `spend` covers, so the footer can name it: a
 /// calendar month, the plan's billing cycle, everything the account ever
 /// spent, or what an API key has used of its own limit.
-enum SpendPeriod: String, Sendable {
+enum SpendPeriod: String, Sendable, Codable {
     case month, billingCycle, lifetime, keyLimit
 }
 
-struct UsageSnapshot: Identifiable, Sendable, Equatable {
+struct UsageSnapshot: Identifiable, Sendable, Equatable, Codable {
     var id: String { providerId }
     var providerId: String
     var displayName: String

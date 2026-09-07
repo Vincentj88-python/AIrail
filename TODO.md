@@ -23,15 +23,18 @@ Developer ID waits until AIrail has earned the $99, so the go-public step is a
 free soft launch with a Sponsors goal first, notarization + licence + Show HN
 after (see "Order of work" in `ROADMAP.md`).
 
-**Block A done (2026-09-06/07)** on branch `tier1-block-a`: all ten items
-built, each reviewed by a second agent, plus a polish pass over the reviewers'
-findings; the dated sections below record each one. Everything is **staged,
-not committed** (commit per item or in one go, your call). Test suite: 44 →
-72 green, 5 live tests skipped as before, and no test touches the network any
-more. **By hand at v0.3.0:** re-create the "AIrail Dev" certificate with
-10-year validity (one Claude Keychain re-prompt), and check the General pane's
-height (320 → 380 is unverified). **Next:** block B, starting with
-`locale-formatting-live-countdowns` (the formatter everything else reads).
+**Blocks A and B done (2026-09-06/07)** on branch `tier1-block-a`: all ten
+block A items (each reviewed by a second agent, plus a polish pass) and all
+eleven block B items; the dated sections below record each one. Everything is
+**staged, not committed** (commit per item or in one go, your call). Test
+suite: 44 → 91 green, 5 live tests skipped as before, and no test touches the
+network any more. **By hand at v0.3.0:** re-create the "AIrail Dev"
+certificate with 10-year validity (one Claude Keychain re-prompt), check the
+General pane's height (320 → 380 is unverified), and run the app once to
+eyeball the new HUD lines (pace arc, wall countdown, used-elsewhere, cost
+captions, Screen Time header) — none of it has been seen on screen yet.
+**Next:** block C's first three items — `island-collapses-to-hairline`,
+`energy-honest-hairline`, `ambient-headroom` — then the ID-free block E items.
 
 Things established that reverse or extend earlier notes:
 
@@ -70,6 +73,33 @@ Things established that reverse or extend earlier notes:
 - **v0.3.0 launch scope (my pick):** tier 1 blocks A + B + E plus the first
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
+
+## Local usage ledger (2026-09-07)
+
+Block B, last item. `Providers/Support/UsageStore.swift`: an actor keeping one
+JSON file per account under `~/Library/Application Support/AIrail/usage/`
+(`UsageLedger`: version, the last snapshot with `account` stripped, daily
+buckets upserted by start date and pruned to 366 days, the pace samples and
+their window, and for a feedless account its daily levels), written
+atomically and only when the bytes change, deleted on Remove Account. The
+usage types are `Codable` (ISO 8601 dates, sorted keys). `ProviderManager
+.start()` now restores before the first read: each connected account's last
+real numbers come back as `stale` (so a first read that fails leaves numbers,
+not a blank) and its pace samples come back (so the first fresh read is a
+pace rather than a two-minute wait); `recorded(_:)` folds every successful
+read in off the main actor. **Copilot has a chart now:** with no per-request
+feed, `UsageLedger.recordLevel` samples its used count once a day and
+`derivedDays` charts today minus yesterday — only across consecutive days
+(a gap is never spread across days AIrail wasn't running), a reset making
+the day's level its usage, nothing at all until two consecutive days exist.
+`UsageChartSection` counts the account's unit ("requests", "AI credits")
+when there are no tokens to chart, header and callout included. README's
+privacy paragraph says exactly what lands on disk (counts, model ids,
+project folder names; never a token, key or email). **Phase two, not built:**
+"Export Usage…" (CSV/JSON via NSSavePanel) and "Delete Usage History…" —
+they want the store to have accumulated more than a week first; `UsageStore
+.deleteAll()` is already there for the Privacy pane. Cut: the retention
+picker and a CLI. 91 green (+4).
 
 ## Cost by model and project (2026-09-07)
 

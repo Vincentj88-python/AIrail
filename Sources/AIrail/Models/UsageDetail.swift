@@ -2,7 +2,7 @@ import Foundation
 
 /// Tokens broken down the way every provider reports them. `input` is the
 /// uncached part; the four add up to the total.
-struct TokenSplit: Sendable, Equatable {
+struct TokenSplit: Sendable, Equatable, Codable {
     var input: Double = 0
     var output: Double = 0
     var cacheWrite: Double = 0
@@ -30,13 +30,13 @@ struct TokenSplit: Sendable, Equatable {
 
 /// One model in one project — the grain at which token mixes are kept, so
 /// cost can be priced per model and summed per project.
-struct UsageKey: Hashable, Sendable {
+struct UsageKey: Hashable, Sendable, Codable {
     var model: String? = nil
     var project: String? = nil
 }
 
 /// Everything counted within one time bucket (an hour, a day, or a week).
-struct UsageAggregate: Sendable, Equatable {
+struct UsageAggregate: Sendable, Equatable, Codable {
     var tokens = TokenSplit()
     /// Thinking / reasoning tokens, a subset of `tokens.output`.
     var thinking: Double = 0
@@ -75,7 +75,7 @@ struct UsageAggregate: Sendable, Equatable {
     }
 }
 
-struct UsageBucket: Sendable, Identifiable, Equatable {
+struct UsageBucket: Sendable, Identifiable, Equatable, Codable {
     var id: Date { start }
     let start: Date
     var usage: UsageAggregate
@@ -93,7 +93,7 @@ struct UsageShare: Sendable, Identifiable, Equatable {
 
 /// One of a provider's meters when it has several (Copilot's premium / chat /
 /// completions, Cursor's auto / API / total).
-struct UsageMeter: Sendable, Identifiable, Equatable {
+struct UsageMeter: Sendable, Identifiable, Equatable, Codable {
     var id: String { name }
     let name: String
     let percent: Double?
@@ -104,7 +104,7 @@ struct UsageMeter: Sendable, Identifiable, Equatable {
 
 /// The detail behind a snapshot's headline numbers. Every field is optional
 /// in spirit — providers fill what their source actually exposes.
-struct UsageDetail: Sendable, Equatable {
+struct UsageDetail: Sendable, Equatable, Codable {
     /// Hourly buckets for the last 24 hours, oldest first.
     var hours: [UsageBucket] = []
     /// Daily buckets for the last 7 local days, oldest first, ending today.

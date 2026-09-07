@@ -14,6 +14,9 @@ struct UsageChartSection: View {
     let color: Color
     /// The provider's current rolling session window, when it has one.
     let sessionWindow: DateInterval?
+    /// What a feedless account's days count ("requests", "AI credits"), for
+    /// the header and callout when there are no tokens to chart.
+    var unitLabel = "requests"
 
     @AppStorage("overlayChartRange") private var storedRange = ChartRange.day.rawValue
     @State private var hoverIndex: Int?
@@ -26,6 +29,13 @@ struct UsageChartSection: View {
     private var days: [UsageBucket] { detail.days }
     private var hasHourly: Bool { !hours.isEmpty }
     private var hasDaily: Bool { !days.isEmpty }
+    /// An account whose history is a daily count rather than tokens (Copilot's
+    /// levels): the chart and header count those instead.
+    private var chartsUnits: Bool { detail.week.tokens.total == 0 && detail.week.messages > 0 }
+
+    private func value(of bucket: UsageBucket) -> Double {
+        chartsUnits ? Double(bucket.usage.messages) : bucket.usage.tokens.total
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -66,7 +76,9 @@ struct UsageChartSection: View {
                     .kerning(0.8)
                     .foregroundStyle(.secondary)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(showingDay ? Self.figure(hours.reduce(0) { $0 + $1.usage.tokens.total }) : Self.figure(detail.week.tokens.total / Double(max(days.count, 1))))
+                    Text(showingDay
+                         ? figure(hours.reduce(0) { $0 + value(of: $1) })
+                         : figure(days.reduce(0) { $0 + value(of: $1) } / Double(max(days.count, 1))))
                         .font(.system(size: 20, weight: .semibold))
                         .monospacedDigit()
                     if !showingDay, let delta = detail.weekOverWeek {
@@ -81,8 +93,8 @@ struct UsageChartSection: View {
         }
     }
 
-    static func figure(_ tokens: Double) -> String {
-        UsageFormatting.compactTokens(tokens) + " tokens"
+    private func figure(_ amount: Double) -> String {
+        UsageFormatting.compactTokens(amount) + " " + (chartsUnits ? unitLabel : "tokens")
     }
 
     private var rangeBinding: Binding<ChartRange> {
@@ -149,8 +161,8 @@ struct UsageChartSection: View {
     private var dailyChart: some View {
         ZStack(alignment: .top) {
             Sparkline(
-                values: days.map { $0.usage.tokens.total }, dates: days.map(\.start), color: color,
-                highlighted: hoverIndex, average: detail.week.tokens.total / Double(max(days.count, 1))
+                values: days.map(value(of:)), dates: days.map(\.start), color: color,
+                highlighted: hoverIndex, average: days.reduce(0) { $0 + value(of: $1) } / Double(max(days.count, 1))
             )
                 .overlay(alignment: .top) {
                     hoverTracker(count: days.count).frame(height: 104)
@@ -185,7 +197,7 @@ struct UsageChartSection: View {
             GeometryReader { geo in
                 let column = geo.size.width / CGFloat(count)
                 let x = column * (CGFloat(index) + 0.5)
-                ChartCallout(bucket: bucket, style: style == .hour ? .hour : .day)
+                ChartCallout(bucket: bucket, style: style == .hour ? .hour : .day, unit: unitLabel)
                     .fixedSize()
                     .background(GeometryReader { calloutGeo in
                         Color.clear.preference(key: CalloutWidthKey.self, value: calloutGeo.size.width)
@@ -234,6 +246,7 @@ struct ChartCallout: View {
 
     let bucket: UsageBucket
     let style: Style
+    var unit = "requests"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -273,8 +286,9 @@ struct ChartCallout: View {
 
     private var summary: String {
         let usage = bucket.usage
-        var parts = ["\(UsageFormatting.compactTokens(usage.tokens.total)) tokens"]
-        if usage.messages > 0 { parts.append("\(usage.messages) requests") }
+        var parts: [String] = []
+        if usage.tokens.total > 0 || usage.messages == 0 { parts.append("\(UsageFormatting.compactTokens(usage.tokens.total)) tokens") }
+        if usage.messages > 0 { parts.append("\(usage.messages) \(unit)") }
         if usage.cost > 0 { parts.append(UsageFormatting.dollars(usage.cost)) }
         return parts.joined(separator: " · ")
     }
