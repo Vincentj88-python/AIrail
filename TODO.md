@@ -71,6 +71,26 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Screen Time header (2026-09-07)
+
+Block B. The chart's "USAGE" caption is now Screen Time's header: "LAST 24
+HOURS" with the day's total, or "DAILY AVERAGE" with the week's tokens ÷ 7
+at 20 pt semibold and a secondary `Label("12% from last week", systemImage:
+arrow.up)` when there is a week before to compare with (`UsageDetail
+.weekOverWeek` via `UsageFormatting.percentDelta`, nil unless the previous
+tokens > 0); plain "USAGE" until any history exists. The sparkline draws the
+daily average as a dashed line. Sources: `TranscriptScanner.summary` gained
+`lookbackDays` (14) separate from `days` (7), so `week` stays a week and
+`Summary.previousWeek` is the seven days before it (the research measured
+the 14-day first scan at ≈ 2.5 s inside the actor, and Claude Code's default
+30-day transcript retention makes 14 safe); `CursorProvider.historyDays` is
+14 and `CursorUsage.detail` splits its fortnight the same way, dropping
+anything older; demo data fills last week at 0.89. The "30 Days" segment
+stays cut (retention edge, no Copilot source, Cursor page cap, and the
+Battery pane stops at ten days). Keyed platforms get the comparison once
+their parsers are verified against real keys. README's card paragraph updated.
+85 green (+1, plus scanner assertions).
+
 ## Used elsewhere (2026-09-07)
 
 Block B. The session ring climbing while nothing ran on this Mac looked like

@@ -133,10 +133,18 @@ final class MockUsageEngine {
             days[day] = usage
             week.merge(usage)
         }
+        // Last week, a touch quieter, so the header has something to compare.
+        var previousWeek = UsageAggregate()
+        previousWeek.messages = Int(Double(week.messages) * 0.89)
+        previousWeek.tokens = TokenSplit(
+            input: week.tokens.input * 0.89, output: week.tokens.output * 0.89,
+            cacheWrite: week.tokens.cacheWrite * 0.89, cacheRead: week.tokens.cacheRead * 0.89
+        )
         return UsageDetail(
             hours: UsageBucketing.series(hours, count: 24, component: .hour, endingAt: now, calendar: calendar),
             days: UsageBucketing.series(days, count: 7, component: .day, endingAt: now, calendar: calendar),
-            week: week
+            week: week,
+            previousWeek: previousWeek
         )
     }
 

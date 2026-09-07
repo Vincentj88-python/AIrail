@@ -95,8 +95,16 @@ struct UsageDetail: Sendable, Equatable {
     /// When this Mac's tool last wrote a counted transcript line, for the
     /// providers whose history comes from local transcripts.
     var newestLocalEvent: Date? = nil
+    /// The seven days before `days`, when the source reaches back that far.
+    var previousWeek: UsageAggregate? = nil
 
     var hasActivity: Bool { !week.isEmpty }
+
+    /// Tokens this week against last week, as a percentage; nil until there
+    /// is a last week to compare with.
+    var weekOverWeek: Double? {
+        UsageFormatting.percentDelta(current: week.tokens.total, previous: previousWeek?.tokens.total)
+    }
 
     var byModel: [UsageShare] {
         week.models

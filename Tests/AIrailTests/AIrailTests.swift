@@ -846,10 +846,12 @@ final class AIrailTests: XCTestCase {
             #"{"type":"assistant","timestamp":"\#(formatter.string(from: date))","requestId":"r","message":{"id":"\#(id)","usage":{"input_tokens":\#(tokens),"output_tokens":0}}}"#
         }
         let file = directory.appendingPathComponent("session.jsonl")
+        let lastWeek = now.addingTimeInterval(-10 * 86400)
         let initial = [
             line(now, id: "a", tokens: 10),
             line(now, id: "a", tokens: 10), // streamed duplicate
             line(yesterday, id: "b", tokens: 5),
+            line(lastWeek, id: "z", tokens: 8), // the week before: compared with, not charted
             #"{"type":"user","timestamp":"\#(formatter.string(from: now))"}"#,
         ].joined(separator: "\n") + "\n"
         try initial.write(to: file, atomically: true, encoding: .utf8)
@@ -862,7 +864,8 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(first.days[6].usage.messages, 1)
         XCTAssertEqual(first.days[5].usage.tokens.total, 5)
         XCTAssertEqual(first.hours.last?.usage.tokens.total, 10)
-        XCTAssertEqual(first.week.tokens.total, 15)
+        XCTAssertEqual(first.week.tokens.total, 15, "the week is still seven days")
+        XCTAssertEqual(first.previousWeek.tokens.total, 8, "the week before is summed separately")
         XCTAssertEqual(first.newestEventDate.map { $0.timeIntervalSince1970.rounded() }, now.timeIntervalSince1970.rounded(), "the newest counted line is when this Mac last did something")
 
         // Append: only the new line should be read and added.
@@ -930,6 +933,34 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(UsageFormatting.spokenUsage(s, now: now), "limit reached, resets in " + UsageFormatting.duration(hours: 72))
         XCTAssertEqual(UsageFormatting.spokenUsage(key, now: now), "100 percent used")
         XCTAssertEqual(UsageFormatting.spokenUsage(nil, now: now), "no data")
+    }
+
+    /// The Screen Time header compares this week with the one before, only
+    /// when there was one; Cursor's feed splits its fortnight the same way.
+    func testWeekOverWeek() {
+        XCTAssertEqual(UsageFormatting.percentDelta(current: 112, previous: 100), 12)
+        XCTAssertEqual(UsageFormatting.percentDelta(current: 50, previous: 100), -50)
+        XCTAssertNil(UsageFormatting.percentDelta(current: 50, previous: 0), "nothing to compare with")
+        XCTAssertNil(UsageFormatting.percentDelta(current: 50, previous: nil))
+        var detail = UsageDetail()
+        detail.week.tokens = TokenSplit(input: 1120)
+        XCTAssertNil(detail.weekOverWeek)
+        detail.previousWeek = UsageAggregate()
+        detail.previousWeek?.tokens = TokenSplit(input: 1000)
+        XCTAssertEqual(detail.weekOverWeek ?? 0, 12, accuracy: 0.0001)
+
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let report = CursorUsage.Report(percentUsed: 10, autoPercentUsed: nil, apiPercentUsed: nil, autoMessage: nil, apiMessage: nil, cycleStart: nil, cycleEnd: nil, plan: nil)
+        let events = [
+            CursorUsage.Event(id: "1", date: now.addingTimeInterval(-3600), model: "m", tokens: TokenSplit(input: 300), cents: 1, conversation: nil),
+            CursorUsage.Event(id: "2", date: now.addingTimeInterval(-10 * 86400), model: "m", tokens: TokenSplit(input: 200), cents: 1, conversation: nil),
+            CursorUsage.Event(id: "3", date: now.addingTimeInterval(-20 * 86400), model: "m", tokens: TokenSplit(input: 999), cents: 1, conversation: nil),
+        ]
+        let cursor = CursorUsage.detail(events: events, report: report, days: 7, now: now)
+        XCTAssertEqual(cursor.week.tokens.total, 300)
+        XCTAssertEqual(cursor.previousWeek?.tokens.total, 200, "a fortnight of events: the older week is compared, older still is dropped")
+        XCTAssertEqual(cursor.days.count, 7)
+        XCTAssertEqual(cursor.weekOverWeek ?? 0, 50, accuracy: 0.0001)
     }
 
     /// "Used elsewhere": the session figure moving while this Mac's transcripts

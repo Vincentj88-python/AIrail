@@ -34,6 +34,8 @@ actor TranscriptScanner {
         var hours: [UsageBucket]
         var days: [UsageBucket]
         var week: UsageAggregate
+        /// The seven days before `days`, summed, for the week-over-week comparison.
+        var previousWeek = UsageAggregate()
         /// When the newest counted line was written — the last moment this
         /// Mac's tool did anything, for the "used elsewhere" observation.
         var newestEventDate: Date? = nil
@@ -70,24 +72,32 @@ actor TranscriptScanner {
         self.extractor = extractor
     }
 
-    /// The last 24 hours by hour, the last 7 days by day, and the week's totals.
-    func summary(days dayCount: Int = 7, hours hourCount: Int = 24, now: Date = Date()) throws -> Summary {
+    /// The last 24 hours by hour, the last 7 days by day, the week's totals,
+    /// and the week before that (`lookbackDays` reaches back far enough for
+    /// it; the series and `week` stay `dayCount` long).
+    func summary(days dayCount: Int = 7, hours hourCount: Int = 24, lookbackDays: Int = 14, now: Date = Date()) throws -> Summary {
         let today = calendar.startOfDay(for: now)
         let dayCutoff = calendar.date(byAdding: .day, value: -(dayCount - 1), to: today) ?? now
+        let lookbackCutoff = calendar.date(byAdding: .day, value: -(max(lookbackDays, dayCount) - 1), to: today) ?? dayCutoff
         let hourCutoff = UsageBucketing.floor(now.addingTimeInterval(-Double(hourCount - 1) * 3600), to: .hour, calendar: calendar)
-        try scan(since: dayCutoff, pruningHoursBefore: hourCutoff)
+        try scan(since: lookbackCutoff, pruningHoursBefore: hourCutoff)
 
         var hours: [Date: UsageAggregate] = [:]
         var days: [Date: UsageAggregate] = [:]
         var week = UsageAggregate()
+        var previousWeek = UsageAggregate()
         var newest: Date?
         for state in files.values {
             for (hour, usage) in state.hours where hour >= hourCutoff {
                 hours[hour, default: UsageAggregate()].merge(usage)
             }
-            for (day, usage) in state.days where day >= dayCutoff {
-                days[day, default: UsageAggregate()].merge(usage)
-                week.merge(usage)
+            for (day, usage) in state.days {
+                if day >= dayCutoff {
+                    days[day, default: UsageAggregate()].merge(usage)
+                    week.merge(usage)
+                } else if day >= lookbackCutoff {
+                    previousWeek.merge(usage)
+                }
             }
             if let date = state.newestEvent, newest.map({ date > $0 }) ?? true {
                 newest = date
@@ -97,6 +107,7 @@ actor TranscriptScanner {
             hours: UsageBucketing.series(hours, count: hourCount, component: .hour, endingAt: now, calendar: calendar),
             days: UsageBucketing.series(days, count: dayCount, component: .day, endingAt: now, calendar: calendar),
             week: week,
+            previousWeek: previousWeek,
             newestEventDate: newest
         )
     }

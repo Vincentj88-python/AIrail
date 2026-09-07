@@ -26,7 +26,8 @@ final class CursorProvider: UsageProviding {
         + "/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
     static let usageURL = URL(string: "https://cursor.com/api/usage-summary")!
     static let eventsURL = URL(string: "https://cursor.com/api/dashboard/get-filtered-usage-events")!
-    private static let historyDays = 7
+    /// Two weeks of events are kept: the week on the chart and the one before it.
+    private static let historyDays = 14
 
     private var credential: CursorUsage.Credential?
     /// Per-request events for the last week, oldest first. Refreshes only
@@ -231,6 +232,10 @@ enum CursorUsage {
         var hours: [Date: UsageAggregate] = [:]
         var daily: [Date: UsageAggregate] = [:]
         var week = UsageAggregate()
+        var previousWeek = UsageAggregate()
+        let today = calendar.startOfDay(for: now)
+        let weekStart = calendar.date(byAdding: .day, value: -(days - 1), to: today) ?? today
+        let previousStart = calendar.date(byAdding: .day, value: -days, to: weekStart) ?? weekStart
         for event in events {
             var usage = UsageAggregate()
             usage.tokens = event.tokens
@@ -242,9 +247,14 @@ enum CursorUsage {
             if let conversation = event.conversation {
                 usage.sessions.insert(conversation)
             }
-            hours[UsageBucketing.floor(event.date, to: .hour, calendar: calendar), default: UsageAggregate()].merge(usage)
-            daily[calendar.startOfDay(for: event.date), default: UsageAggregate()].merge(usage)
-            week.merge(usage)
+            let day = calendar.startOfDay(for: event.date)
+            if day >= weekStart {
+                hours[UsageBucketing.floor(event.date, to: .hour, calendar: calendar), default: UsageAggregate()].merge(usage)
+                daily[day, default: UsageAggregate()].merge(usage)
+                week.merge(usage)
+            } else if day >= previousStart {
+                previousWeek.merge(usage)
+            }
         }
         var meters: [UsageMeter] = []
         if let total = report.percentUsed {
@@ -260,7 +270,8 @@ enum CursorUsage {
             hours: events.isEmpty ? [] : UsageBucketing.series(hours, count: 24, component: .hour, endingAt: now, calendar: calendar),
             days: events.isEmpty ? [] : UsageBucketing.series(daily, count: days, component: .day, endingAt: now, calendar: calendar),
             week: week,
-            meters: meters
+            meters: meters,
+            previousWeek: events.isEmpty ? nil : previousWeek
         )
     }
 

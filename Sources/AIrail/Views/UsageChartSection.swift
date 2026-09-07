@@ -29,11 +29,8 @@ struct UsageChartSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("USAGE")
-                    .font(.caption.weight(.medium))
-                    .kerning(0.8)
-                    .foregroundStyle(.secondary)
+            HStack(alignment: .top) {
+                header
                 Spacer()
                 if hasHourly && hasDaily {
                     Picker("Range", selection: rangeBinding) {
@@ -49,6 +46,43 @@ struct UsageChartSection: View {
             }
             chart
         }
+    }
+
+    /// Screen Time's header over the chart: a caption naming the range, the
+    /// hero figure for it, and for the week how it compares with the week
+    /// before. Plain "USAGE" until there is any history.
+    @ViewBuilder
+    private var header: some View {
+        if !hasHourly && !hasDaily {
+            Text("USAGE")
+                .font(.caption.weight(.medium))
+                .kerning(0.8)
+                .foregroundStyle(.secondary)
+        } else {
+            let showingDay = range == .day && hasHourly
+            VStack(alignment: .leading, spacing: 2) {
+                Text(showingDay ? "LAST 24 HOURS" : "DAILY AVERAGE")
+                    .font(.caption.weight(.medium))
+                    .kerning(0.8)
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(showingDay ? Self.figure(hours.reduce(0) { $0 + $1.usage.tokens.total }) : Self.figure(detail.week.tokens.total / Double(max(days.count, 1))))
+                        .font(.system(size: 20, weight: .semibold))
+                        .monospacedDigit()
+                    if !showingDay, let delta = detail.weekOverWeek {
+                        Label("\(abs(Int(delta.rounded())))% from last week", systemImage: delta >= 0 ? "arrow.up" : "arrow.down")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .help("Tokens over the last seven days against the seven before them.")
+                    }
+                }
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    static func figure(_ tokens: Double) -> String {
+        UsageFormatting.compactTokens(tokens) + " tokens"
     }
 
     private var rangeBinding: Binding<ChartRange> {
@@ -114,7 +148,10 @@ struct UsageChartSection: View {
 
     private var dailyChart: some View {
         ZStack(alignment: .top) {
-            Sparkline(values: days.map { $0.usage.tokens.total }, dates: days.map(\.start), color: color, highlighted: hoverIndex)
+            Sparkline(
+                values: days.map { $0.usage.tokens.total }, dates: days.map(\.start), color: color,
+                highlighted: hoverIndex, average: detail.week.tokens.total / Double(max(days.count, 1))
+            )
                 .overlay(alignment: .top) {
                     hoverTracker(count: days.count).frame(height: 104)
                 }

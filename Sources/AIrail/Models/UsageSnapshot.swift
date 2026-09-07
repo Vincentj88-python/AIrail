@@ -204,6 +204,13 @@ enum UsageFormatting {
         return "resets " + date.formatted(Date.FormatStyle(locale: locale).day().month(.abbreviated))
     }
 
+    /// `current` against `previous` in percent ("+12" for 112 vs 100); nil
+    /// unless there was a previous figure to compare with.
+    static func percentDelta(current: Double, previous: Double?) -> Double? {
+        guard let previous, previous > 0 else { return nil }
+        return (current - previous) / previous * 100
+    }
+
     /// "1h 12m" or "12d 3h" until `date`; "resetting…" once it has passed
     /// and the next read hasn't yet confirmed the fresh window.
     static func countdown(to date: Date, now: Date = Date(), locale: Locale = .autoupdatingCurrent) -> String {

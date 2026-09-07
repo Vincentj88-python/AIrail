@@ -8,6 +8,8 @@ struct Sparkline: View {
     let color: Color
     /// Index of the day under the pointer, drawn with a marker line and a bigger dot.
     var highlighted: Int? = nil
+    /// The daily average, drawn as a dashed line across the days like Screen Time's.
+    var average: Double? = nil
 
     var body: some View {
         VStack(spacing: 10) {
@@ -15,6 +17,13 @@ struct Sparkline: View {
                 let points = normalizedPoints(in: geo.size)
                 ZStack {
                     gridlines(points: points, height: geo.size.height)
+                    if let average, let y = yPosition(for: average, in: geo.size) {
+                        Path { path in
+                            path.move(to: CGPoint(x: 0, y: y))
+                            path.addLine(to: CGPoint(x: geo.size.width, y: y))
+                        }
+                        .stroke(Color.white.opacity(0.28), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    }
                     areaPath(points: points, height: geo.size.height)
                         .fill(
                             LinearGradient(
@@ -71,18 +80,22 @@ struct Sparkline: View {
     private func normalizedPoints(in size: CGSize) -> [CGPoint] {
         guard !values.isEmpty else { return [] }
         let columnWidth = size.width / CGFloat(values.count)
+        return values.enumerated().map { index, value in
+            CGPoint(x: columnWidth * (CGFloat(index) + 0.5), y: yPosition(for: value, in: size) ?? size.height)
+        }
+    }
+
+    /// The same vertical scale the points use, for any value on it.
+    private func yPosition(for value: Double, in size: CGSize) -> CGFloat? {
+        guard !values.isEmpty else { return nil }
         let low = values.min() ?? 0
         let high = values.max() ?? 1
         let span = max(high - low, 0.0001)
         let topInset: CGFloat = 8
         let bottomInset: CGFloat = 8
         let usableHeight = size.height - topInset - bottomInset
-        return values.enumerated().map { index, value in
-            let x = columnWidth * (CGFloat(index) + 0.5)
-            let normalized = (value - low) / span
-            let y = size.height - bottomInset - usableHeight * CGFloat(normalized)
-            return CGPoint(x: x, y: y)
-        }
+        let normalized = min(max((value - low) / span, 0), 1)
+        return size.height - bottomInset - usableHeight * CGFloat(normalized)
     }
 
     private func linePath(points: [CGPoint]) -> Path {

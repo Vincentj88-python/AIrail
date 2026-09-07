@@ -215,7 +215,7 @@ enum ClaudeUsage {
         if let transcripts {
             detail = UsageDetail(
                 hours: transcripts.hours, days: transcripts.days, week: transcripts.week,
-                newestLocalEvent: transcripts.newestEventDate
+                newestLocalEvent: transcripts.newestEventDate, previousWeek: transcripts.previousWeek
             )
         }
         return UsageSnapshot(
