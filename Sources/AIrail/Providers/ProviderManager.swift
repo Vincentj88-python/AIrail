@@ -25,11 +25,16 @@ final class ProviderManager: ObservableObject {
     @Published private(set) var refreshingIds: Set<String> = []
 
     private let settings: AppSettings
+    private let notifier: UsageNotifier
+    /// The wall clock, so tests can move time instead of waiting out a backoff.
+    private let clock: () -> Date
     private var demoEngines: [String: MockUsageEngine] = [:]
     private var lastLive: [String: UsageSnapshot] = [:]
     /// Recent (time, ring percent) samples per provider, for the burn-rate projection.
     private var percentHistory: [String: [(date: Date, percent: Double)]] = [:]
-    private let notifier = UsageNotifier()
+    /// The read in progress per provider. A second refresh joins it instead
+    /// of starting another; disconnecting cancels it.
+    private var inflight: [String: Task<Void, Never>] = [:]
     /// Earliest time each provider may be fetched again; set when a read is
     /// rate-limited or fails, so the timer doesn't keep hammering an endpoint.
     private var backoffUntil: [String: Date] = [:]
@@ -38,10 +43,18 @@ final class ProviderManager: ObservableObject {
     private var timer: Timer?
     private var cancellables: Set<AnyCancellable> = []
 
-    init(settings: AppSettings) {
+    /// The app passes only `settings`; tests hand in scripted providers, a
+    /// notifier that delivers nowhere and a clock they can move.
+    init(
+        settings: AppSettings,
+        providers: [any UsageProviding] = ProviderManager.makeProviders(),
+        notifier: UsageNotifier = UsageNotifier(),
+        clock: @escaping () -> Date = { Date() }
+    ) {
         self.settings = settings
-        let providers = Self.makeProviders()
         self.providers = providers
+        self.notifier = notifier
+        self.clock = clock
         allProviderInfos = providers.map {
             ProviderInfo(
                 id: $0.id,
@@ -159,6 +172,9 @@ final class ProviderManager: ObservableObject {
     }
 
     func disconnect(_ providerId: String) {
+        // A read still in flight must not put the numbers back when it lands.
+        inflight[providerId]?.cancel()
+        inflight[providerId] = nil
         (provider(for: providerId) as? any KeyedUsageProviding)?.forgetKey()
         settings.disconnect(providerId)
         snapshots[providerId] = nil
@@ -180,9 +196,11 @@ final class ProviderManager: ObservableObject {
         restartTimer(interval: settings.refreshInterval)
     }
 
-    /// Providers refresh concurrently so one slow endpoint can't hold up the rest.
+    /// Every connected account (or the demo set while nothing is connected)
+    /// refreshes concurrently, so one slow endpoint can't hold up the rest.
     func refreshAll() async {
-        let tasks = providers.map(\.id).map { id in
+        let ids = (isShowingDemo ? demoProviderInfos : connectedProviderInfos).map(\.id)
+        let tasks = ids.map { id in
             Task { @MainActor in await self.refresh(id) }
         }
         for task in tasks {
@@ -190,44 +208,70 @@ final class ProviderManager: ObservableObject {
         }
     }
 
+    /// One read per provider at a time: a refresh that finds one in flight
+    /// waits for its result rather than starting (or cancelling) another.
     /// A manual refresh (the account page's Refresh button) ignores the
     /// backoff window; the timer honours it.
     func refresh(_ providerId: String, force: Bool = false) async {
+        if let running = inflight[providerId] {
+            await running.value
+            return
+        }
         guard let provider = provider(for: providerId) else { return }
         if settings.isConnected(providerId) {
-            if !force, let until = backoffUntil[providerId], until > Date() {
+            if !force, let until = backoffUntil[providerId], until > clock() {
                 return // still cooling down; leave the last snapshot in place
             }
-            refreshingIds.insert(providerId)
-            defer { refreshingIds.remove(providerId) }
-            do {
-                let snapshot = try await provider.fetchUsage()
-                lastLive[providerId] = snapshot
-                snapshots[providerId] = snapshot
-                lastErrors[providerId] = nil
-                backoffUntil[providerId] = nil
-                failureStreak[providerId] = nil
-                recordSample(snapshot)
-                notifier.consider(snapshot, enabled: settings.notificationsEnabled)
-            } catch {
-                let failure = (error as? ConnectionError) ?? .unreadable(error.localizedDescription)
-                lastErrors[providerId] = failure
-                applyBackoff(providerId, failure: failure)
-                // Keep the last real reading on screen when the failure is
-                // just "couldn't refresh"; blank it when the sign-in is gone.
-                if failure.isTransient, let previous = lastLive[providerId] {
-                    snapshots[providerId] = previous.marking(.stale)
-                } else {
-                    snapshots[providerId] = .empty(
-                        providerId: providerId, displayName: provider.displayName, status: .error
-                    )
-                }
+            let task = Task { @MainActor in await self.read(provider) }
+            inflight[providerId] = task
+            await task.value
+            if inflight[providerId] == task {
+                inflight[providerId] = nil
             }
         } else if isShowingDemo {
             snapshots[providerId] = demoEngines[providerId]?.snapshot(
                 providerId: providerId, displayName: provider.displayName
             )
         }
+    }
+
+    /// The read behind `refresh`, run as its own task so a second refresh can
+    /// join it and a disconnect can cancel it. Nothing is written once the
+    /// account is gone — not even the "cancelled" error the read then throws.
+    private func read(_ provider: any UsageProviding) async {
+        let providerId = provider.id
+        refreshingIds.insert(providerId)
+        defer { refreshingIds.remove(providerId) }
+        do {
+            let snapshot = try await provider.fetchUsage()
+            guard stillWanted(providerId) else { return }
+            lastLive[providerId] = snapshot
+            snapshots[providerId] = snapshot
+            lastErrors[providerId] = nil
+            backoffUntil[providerId] = nil
+            failureStreak[providerId] = nil
+            recordSample(snapshot)
+            notifier.consider(snapshot, enabled: settings.notificationsEnabled)
+        } catch {
+            guard stillWanted(providerId) else { return }
+            let failure = (error as? ConnectionError) ?? .unreadable(error.localizedDescription)
+            lastErrors[providerId] = failure
+            applyBackoff(providerId, failure: failure)
+            // Keep the last real reading on screen when the failure is
+            // just "couldn't refresh"; blank it when the sign-in is gone.
+            if failure.isTransient, let previous = lastLive[providerId] {
+                snapshots[providerId] = previous.marking(.stale)
+            } else {
+                snapshots[providerId] = .empty(
+                    providerId: providerId, displayName: provider.displayName, status: .error
+                )
+            }
+        }
+    }
+
+    /// False once the read's task was cancelled or its account removed.
+    private func stillWanted(_ providerId: String) -> Bool {
+        !Task.isCancelled && settings.isConnected(providerId)
     }
 
     /// Backs off after a transient failure: honour the server's Retry-After if
@@ -243,7 +287,7 @@ final class ProviderManager: ObservableObject {
         failureStreak[providerId] = streak
         let capped = min(streak, 5)
         let exponential = pow(2.0, Double(capped - 1)) * 60 // 1, 2, 4, 8, 16 min
-        var until = Date().addingTimeInterval(exponential)
+        var until = clock().addingTimeInterval(exponential)
         if case .rateLimited(_, let retryAfter) = failure, let retryAfter {
             until = max(until, retryAfter)
         }
@@ -252,9 +296,10 @@ final class ProviderManager: ObservableObject {
 
     private func recordSample(_ snapshot: UsageSnapshot) {
         guard let percent = snapshot.ringPercent else { return }
+        let now = clock()
         var samples = percentHistory[snapshot.providerId] ?? []
-        samples.append((Date(), percent))
-        let cutoff = Date().addingTimeInterval(-1800) // keep the last 30 minutes
+        samples.append((now, percent))
+        let cutoff = now.addingTimeInterval(-1800) // keep the last 30 minutes
         samples.removeAll { $0.date < cutoff }
         percentHistory[snapshot.providerId] = samples
     }
@@ -271,7 +316,7 @@ final class ProviderManager: ObservableObject {
         let hours = last.date.timeIntervalSince(first.date) / 3600
         let slope = (last.percent - first.percent) / hours // %/hour
         guard slope >= 1 else { return nil } // essentially flat → no useful projection
-        let hitsAt = Date().addingTimeInterval((100 - percent) / slope * 3600)
+        let hitsAt = clock().addingTimeInterval((100 - percent) / slope * 3600)
         let reset = snapshot.sessionPercent != nil ? snapshot.resetsAt : (snapshot.weeklyResetsAt ?? snapshot.resetsAt)
         let resetsFirst = reset.map { $0 < hitsAt } ?? false
         return UsageProjection(

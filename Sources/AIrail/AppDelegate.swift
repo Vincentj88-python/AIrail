@@ -53,9 +53,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         applyPosition()
-        providerManager.start()
-        UpdateChecker.checkInBackgroundIfDue()
-        ModelPricing.refreshIfDue()
+        // The tests drive ProviderManager with fakes; the host app they run
+        // in must not poll live endpoints (or prompt for the Keychain) too.
+        if !LaunchOptions.isRunningTests {
+            providerManager.start()
+            UpdateChecker.checkInBackgroundIfDue()
+            ModelPricing.refreshIfDue()
+        }
 
         if let providerId = LaunchOptions.overlayProviderId {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak overlay] in

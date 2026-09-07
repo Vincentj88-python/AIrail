@@ -24,6 +24,12 @@ enum LaunchOptions {
         value(for: "--overlay").flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// True under `xcodebuild test`, where the app is only the test host and
+    /// must not go reading sign-ins or endpoints on its own.
+    static var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
     /// `--flag` yields "", `--flag=x` yields "x", absent yields nil.
     private static func value(for flag: String) -> String? {
         guard let argument = CommandLine.arguments.first(where: { $0 == flag || $0.hasPrefix(flag + "=") }) else {

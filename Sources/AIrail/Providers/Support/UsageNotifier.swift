@@ -6,6 +6,15 @@ import UserNotifications
 /// work. Opt-in; fires at most once per event per window.
 @MainActor
 final class UsageNotifier {
+    /// Asks macOS for permission and reports whether it was granted. The real
+    /// one puts up the one-time "AIrail would like to send you notifications"
+    /// prompt, which is exactly why tests hand in their own answer.
+    typealias Authorize = @MainActor (_ granted: @escaping @MainActor (Bool) -> Void) -> Void
+    /// Hands a finished notification to Notification Center — or, in tests, to an array.
+    typealias Deliver = @MainActor (UNNotificationRequest) -> Void
+
+    private let authorize: Authorize
+    private let deliver: Deliver
     private var authorized = false
     private var requested = false
     /// Highest threshold already announced for the current window, per provider.
@@ -15,11 +24,21 @@ final class UsageNotifier {
 
     private let thresholds = [90, 75]
 
+    init(authorize: @escaping Authorize, deliver: @escaping Deliver) {
+        self.authorize = authorize
+        self.deliver = deliver
+    }
+
+    /// The real thing: Notification Center for both permission and delivery.
+    convenience init() {
+        self.init(authorize: Self.systemAuthorize, deliver: Self.systemDeliver)
+    }
+
     func enableIfNeeded() {
         guard !requested else { return }
         requested = true
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            Task { @MainActor in self.authorized = granted }
+        authorize { [weak self] granted in
+            self?.authorized = granted
         }
     }
 
@@ -66,6 +85,18 @@ final class UsageNotifier {
         content.body = body
         content.sound = nil
         let request = UNNotificationRequest(identifier: id + ".\(Int(Date().timeIntervalSince1970))", content: content, trigger: nil)
+        deliver(request)
+    }
+
+    // MARK: Notification Center
+
+    private static func systemAuthorize(_ granted: @escaping @MainActor (Bool) -> Void) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { ok, _ in
+            Task { @MainActor in granted(ok) }
+        }
+    }
+
+    private static func systemDeliver(_ request: UNNotificationRequest) {
         UNUserNotificationCenter.current().add(request)
     }
 }

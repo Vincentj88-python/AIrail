@@ -62,6 +62,37 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Single-flight, testable refresh (2026-09-06)
+
+- **What was wrong:** `ProviderManager.refresh` had no in-flight guard, so
+  the timer, the Refresh button and a wake-from-sleep could read the same
+  account twice at once (for Claude, two Keychain reads), and a read that
+  landed after Remove Account put the numbers straight back. None of it was
+  testable without a signed-in Mac — providers, the notifier and `Date()`
+  were baked in — and every `xcodebuild test` ran the host app's `start()`
+  against live endpoints.
+- **Fix:** `inflight: [String: Task]` per provider. A second `refresh` joins
+  the running read; `force` skips the backoff window but never cancels (a
+  cancelled `URLSession` throws, which read as a real failure and bumped the
+  streak); `disconnect` cancels; the post-fetch write re-checks
+  `!Task.isCancelled && isConnected` on the success *and* the error path.
+  `refreshAll` maps the connected accounts (or the demo set), not all nine
+  providers. `init(settings:providers:notifier:clock:)` with the real ones
+  as defaults; `UsageNotifier.init(authorize:deliver:)` plus a
+  `convenience init()` for Notification Center, so no test ever trips the
+  system permission prompt. `AppDelegate` skips `start()`, the update check
+  and the pricing fetch under `XCTestConfigurationFilePath`.
+- **Tests:** `ProviderManagerTests.swift` — `FakeProvider` (scripted
+  results, holdable reads, throws "cancelled" like URLSession), `TestClock`,
+  `NotificationInbox`; ten cases covering join, cancel-on-disconnect, force
+  vs. timer, 1→2→4 min backoff and Retry-After, stale vs. error, membership,
+  connect's real read, thresholds once per window, projection through the
+  clock. 55 green (+10); none touch the network.
+- **Left alone, on purpose:** the first alert after launch can still be
+  dropped while the permission callback is pending (notifications item);
+  `KeychainReader`'s `Thread.sleep` stays — `SecItemCopyMatching` blocks that
+  thread for the whole prompt anyway.
+
 ## Remove: v0.1 snapshot fields (2026-09-06)
 
 - **Gone from `UsageSnapshot`:** `sessionUsed`/`sessionLimit` (nil at every
