@@ -242,7 +242,13 @@ final class ProviderManager: ObservableObject {
         guard let provider = provider(for: providerId) else { return }
         if settings.isConnected(providerId) {
             if !force, let until = backoffUntil[providerId], until > clock() {
-                return // still cooling down; leave the last snapshot in place
+                // Still cooling down: the last snapshot stays, minus any
+                // window that has reset in the meantime.
+                if let current = snapshots[providerId], current.status == .stale {
+                    let expired = expiring(current, for: providerId)
+                    if expired != current { snapshots[providerId] = expired }
+                }
+                return
             }
             let task = Task { @MainActor in await self.read(provider) }
             inflight[providerId] = task
@@ -284,13 +290,26 @@ final class ProviderManager: ObservableObject {
             // Keep the last real reading on screen when the failure is
             // just "couldn't refresh"; blank it when the sign-in is gone.
             if failure.isTransient, let previous = lastLive[providerId] {
-                snapshots[providerId] = previous.marking(.stale)
+                snapshots[providerId] = expiring(previous.marking(.stale), for: providerId)
             } else {
                 snapshots[providerId] = .empty(
                     providerId: providerId, displayName: provider.displayName, status: .error
                 )
             }
         }
+    }
+
+    /// Drops the stale numbers of any window that has reset since they were
+    /// read. The first time a window expires, the alerts and pace samples
+    /// that belonged to it go too, so a fresh read starts from nothing.
+    private func expiring(_ snapshot: UsageSnapshot, for providerId: String) -> UsageSnapshot {
+        let expired = snapshot.expiringWindows(now: clock())
+        if let reset = expired.expiredResetAt, reset != snapshots[providerId]?.expiredResetAt {
+            notifier.forget(providerId)
+            percentHistory[providerId] = nil
+            sampleWindows[providerId] = nil
+        }
+        return expired
     }
 
     /// False once the read's task was cancelled or its account removed.

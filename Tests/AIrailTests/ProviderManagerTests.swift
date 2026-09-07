@@ -180,6 +180,41 @@ final class ProviderManagerTests: XCTestCase {
         XCTAssertNil(manager.lastErrors["claude"])
     }
 
+    @MainActor
+    func testStaleReadingLosesTheWindowThatHasReset() async throws {
+        let clock = TestClock()
+        var live = Self.snapshot("claude", percent: 88, resetsAt: clock.now.addingTimeInterval(30))
+        live.weeklyPercent = 40
+        live.weeklyResetsAt = clock.now.addingTimeInterval(6 * 24 * 3600)
+        let fake = FakeProvider(id: "claude", results: [
+            .success(live),
+            .failure(.temporarilyUnavailable(tool: "Claude Code")),
+        ])
+        let (manager, settings) = try makeManager([fake], clock: clock)
+        settings.connect("claude")
+
+        await manager.refresh("claude")
+        clock.advance(by: 10)
+        await manager.refresh("claude", force: true) // the read fails: stale, numbers kept
+        XCTAssertEqual(manager.snapshots["claude"]?.status, .stale)
+        XCTAssertEqual(manager.snapshots["claude"]?.sessionPercent, 88, "the window is still open")
+
+        clock.advance(by: 30) // past the session reset, inside the one-minute backoff
+        await manager.refresh("claude") // the timer: no read, but the expired window goes
+        XCTAssertEqual(fake.reads, 2)
+        let expired = try XCTUnwrap(manager.snapshots["claude"])
+        XCTAssertEqual(expired.status, .stale)
+        XCTAssertNil(expired.sessionPercent, "a stale 88% past its reset is a known-false number")
+        XCTAssertEqual(expired.ringPercent, 40, "the weekly figure is still real")
+        XCTAssertEqual(expired.expiredWindowLabel, "session")
+        XCTAssertNil(manager.projection(for: "claude"), "the pace belonged to the window that ended")
+
+        clock.advance(by: 60)
+        await manager.refresh("claude") // the next failing read re-derives from the last live numbers
+        XCTAssertEqual(fake.reads, 3)
+        XCTAssertNil(manager.snapshots["claude"]?.sessionPercent, "expiry survives a re-mark from the last live read")
+    }
+
     // MARK: Membership
 
     @MainActor

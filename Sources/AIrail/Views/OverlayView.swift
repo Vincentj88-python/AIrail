@@ -156,10 +156,18 @@ struct OverlayView: View {
         case .stale, .error:
             guard let error = manager.lastErrors[info.id] else { return nil }
             return AnyView(
-                Label(error.errorDescription ?? error.shortDescription, systemImage: "exclamationmark.triangle")
-                    .font(.subheadline)
-                    .foregroundStyle(snapshot.status.tint)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(error.errorDescription ?? error.shortDescription, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(snapshot.status.tint)
+                    if let reset = snapshot.expiredResetAt {
+                        // The numbers for that window are gone from the card;
+                        // say why, rather than leave a blank ring unexplained.
+                        Text("The \(snapshot.expiredWindowLabel ?? "usage") window reset \(UsageFormatting.weekdayTime(reset)) — nothing has been read since.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
             )
         case .ok:
             return nil

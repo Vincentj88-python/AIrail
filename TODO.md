@@ -71,6 +71,24 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Stale numbers expire at their reset (2026-09-07)
+
+Block B. A stale 88% ring past its own reset, and an amber hairline all
+weekend from a window that no longer exists, were known-false readings with a
+smaller badge. `UsageSnapshot.expiringWindows(now:)` drops the session
+figures once `resetsAt` has passed and the long window's figures (plus the
+meters, which share it) once that reset has passed, recording
+`expiredResetAt` / `expiredWindowLabel`. `ProviderManager` applies it in the
+failure path (`lastLive.marking(.stale)` → expiring) and on every timer tick
+that is still inside the backoff, so the ring drops to "—" and the hairline
+calms at the reset itself, not at the next successful read; the first time a
+window expires it forgets the notifier marks and the pace samples for that
+account. The HUD's stale notice gains a second line: "The session window
+reset Fri 2:30 PM — nothing has been read since." `UsageSnapshot` is now
+`Equatable` (needed to publish only on change). ~40 lines, no setting. Tests:
+the pure expiry beside `testStaleMarkingKeepsNumbers`, and a manager test
+that walks a failing read through its reset inside the backoff. 76 green (+2).
+
 ## Read the 2026 meters (2026-09-07)
 
 Block B. The research claimed Copilot grew session/weekly lanes and Codex Pro

@@ -41,6 +41,47 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(stale.sessionPercent, 42)
     }
 
+    /// A stale reading keeps its numbers only while the window they were
+    /// read from still exists: past its reset the session figures go, past
+    /// the weekly reset the rest (and the meters) go, and the snapshot
+    /// remembers which window ended so the card can say so.
+    func testStaleNumbersExpireAtTheirReset() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var snapshot = UsageSnapshot.empty(providerId: "claude", displayName: "Claude", status: .stale)
+        snapshot.sessionPercent = 88
+        snapshot.resetsAt = now.addingTimeInterval(-60)
+        snapshot.weeklyPercent = 40
+        snapshot.weeklyResetsAt = now.addingTimeInterval(6 * 24 * 3600)
+        snapshot.detail.meters = [UsageMeter(name: "Opus", percent: 30)]
+
+        let afterSession = snapshot.expiringWindows(now: now)
+        XCTAssertNil(afterSession.sessionPercent)
+        XCTAssertNil(afterSession.resetsAt)
+        XCTAssertEqual(afterSession.ringPercent, 40, "the weekly window is still real, so the ring falls back to it")
+        XCTAssertEqual(afterSession.expiredResetAt, now.addingTimeInterval(-60))
+        XCTAssertEqual(afterSession.expiredWindowLabel, "session")
+        XCTAssertEqual(afterSession.detail.meters.count, 1, "the meters belong to the weekly window")
+
+        let afterWeek = snapshot.expiringWindows(now: now.addingTimeInterval(7 * 24 * 3600))
+        XCTAssertNil(afterWeek.ringPercent)
+        XCTAssertNil(afterWeek.weeklyResetsAt)
+        XCTAssertTrue(afterWeek.detail.meters.isEmpty)
+        XCTAssertEqual(afterWeek.expiredWindowLabel, "weekly", "the later reset is the one named")
+
+        XCTAssertEqual(snapshot.expiringWindows(now: now.addingTimeInterval(-120)), snapshot, "nothing expires before its reset")
+
+        var monthly = UsageSnapshot.empty(providerId: "copilot", displayName: "Copilot", status: .stale)
+        monthly.weeklyPercent = 61
+        monthly.weeklyUsed = 923
+        monthly.weeklyLimit = 1500
+        monthly.periodLabel = "monthly"
+        monthly.resetsAt = now.addingTimeInterval(-1)
+        let expiredMonthly = monthly.expiringWindows(now: now)
+        XCTAssertNil(expiredMonthly.weeklyUsed)
+        XCTAssertNil(expiredMonthly.resetsAt, "a provider with only a long window keeps its reset in resetsAt")
+        XCTAssertEqual(expiredMonthly.expiredWindowLabel, "monthly")
+    }
+
     // MARK: Provider registry
 
     @MainActor

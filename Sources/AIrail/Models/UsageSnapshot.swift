@@ -16,7 +16,7 @@ enum SpendPeriod: String, Sendable {
     case month, billingCycle, lifetime, keyLimit
 }
 
-struct UsageSnapshot: Identifiable, Sendable {
+struct UsageSnapshot: Identifiable, Sendable, Equatable {
     var id: String { providerId }
     var providerId: String
     var displayName: String
@@ -45,6 +45,11 @@ struct UsageSnapshot: Identifiable, Sendable {
     var weeklyResetsAt: Date? = nil
     /// Who is signed in (an email or handle), when the source reveals it.
     var account: String? = nil
+    /// Set by `expiringWindows`: the reset time of a window whose numbers
+    /// were dropped because it ended after the last real read, and which
+    /// window that was ("session" or the period label).
+    var expiredResetAt: Date? = nil
+    var expiredWindowLabel: String? = nil
     /// Hourly/daily buckets, model and project shares, meters — whatever the
     /// source exposes beyond the headline numbers.
     var detail = UsageDetail()
@@ -84,6 +89,35 @@ extension UsageSnapshot {
         return copy
     }
 
+    /// A stale reading past its own reset is a known-false number: the window
+    /// it was read from no longer exists. This drops the session figures once
+    /// `resetsAt` has passed, and the longer window's figures (plus the meters,
+    /// which share it) once that reset has passed, recording which window went.
+    func expiringWindows(now: Date = Date()) -> UsageSnapshot {
+        var copy = self
+        let hadSession = sessionPercent != nil
+        let weeklyReset = weeklyResetsAt ?? (hadSession ? nil : resetsAt)
+        if hadSession, let reset = resetsAt, reset < now {
+            copy.sessionPercent = nil
+            copy.resetsAt = nil
+            copy.expiredResetAt = reset
+            copy.expiredWindowLabel = "session"
+        }
+        if let reset = weeklyReset, reset < now {
+            copy.weeklyUsed = nil
+            copy.weeklyLimit = nil
+            copy.weeklyPercent = nil
+            copy.weeklyResetsAt = nil
+            if !hadSession { copy.resetsAt = nil }
+            copy.detail.meters = []
+            if copy.expiredResetAt.map({ reset > $0 }) ?? true {
+                copy.expiredResetAt = reset
+                copy.expiredWindowLabel = periodLabel
+            }
+        }
+        return copy
+    }
+
     /// A snapshot with no numbers at all, for a provider that has never been read.
     static func empty(providerId: String, displayName: String, status: UsageStatus) -> UsageSnapshot {
         UsageSnapshot(
@@ -113,9 +147,14 @@ enum UsageFormatting {
     /// week, "resets Oct 1" (or "1 Oct") further out.
     static func resetString(_ date: Date, now: Date = Date(), locale: Locale = .autoupdatingCurrent) -> String {
         if date.timeIntervalSince(now) < 6 * 24 * 3600 {
-            return "resets " + date.formatted(Date.FormatStyle(locale: locale).weekday(.abbreviated).hour().minute())
+            return "resets " + weekdayTime(date, locale: locale)
         }
         return "resets " + date.formatted(Date.FormatStyle(locale: locale).day().month(.abbreviated))
+    }
+
+    /// "Mon 9:00 AM" / "Mon 09:00" — a moment within the week.
+    static func weekdayTime(_ date: Date, locale: Locale = .autoupdatingCurrent) -> String {
+        date.formatted(Date.FormatStyle(locale: locale).weekday(.abbreviated).hour().minute())
     }
 
     /// The UTC month `date` falls in, as "SEP": every `.month` spend is
