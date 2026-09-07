@@ -92,7 +92,7 @@ struct NotchView: View {
 
     private var railAccent: Color {
         let peak = manager.railProviderInfos
-            .compactMap { manager.snapshot(for: $0.id)?.ringPercent }
+            .compactMap { manager.snapshot(for: $0.id)?.peakPercent }
             .max()
         return UsageSeverity.of(peak).accent
     }
@@ -149,7 +149,14 @@ struct NotchView: View {
             if let info {
                 Text(info.displayName)
                     .foregroundStyle(.white.opacity(0.9))
-                if let percent = snapshot?.ringPercent {
+                if let wall = snapshot?.atLimitResetsAt {
+                    // At the wall the caption is the time until it lifts.
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        Text(UsageFormatting.countdown(to: wall, now: context.date))
+                            .fontWeight(.semibold)
+                            .foregroundStyle(info.color)
+                    }
+                } else if let percent = snapshot?.ringPercent {
                     // Digits roll when this provider's number moves; a
                     // different provider is a different Text, not a roll.
                     Text("\(Int(percent.rounded()))%")
@@ -227,6 +234,6 @@ private struct NotchMarksRow: View {
         // No per-mark entrance: the island unfurls as one motion.
         .help(snapshot?.ringPercent.map { "\(info.displayName) — \(Int($0.rounded()))%" } ?? info.displayName)
         .accessibilityLabel(info.displayName)
-        .accessibilityValue(snapshot?.ringPercent.map { "\(Int($0.rounded())) percent used" } ?? "no data")
+        .accessibilityValue(UsageFormatting.spokenUsage(snapshot))
     }
 }

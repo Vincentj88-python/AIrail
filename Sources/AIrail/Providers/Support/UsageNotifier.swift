@@ -79,10 +79,15 @@ final class UsageNotifier {
             remember(nil, at: mark)
             announcedBefore = 0
         }
-        guard let crossed = thresholds.first(where: { Int(percent) >= $0 }) else { return }
-        let announces = crossed > announcedBefore
-        let schedules = window != nil && scheduledResets[id] != window
-        guard announces || schedules else { return }
+        let crossed = thresholds.first(where: { Int(percent) >= $0 })
+        let announces = crossed.map { $0 > announcedBefore } ?? false
+        let schedules = crossed != nil && window != nil && scheduledResets[id] != window
+        // The wall: a spent window with a reset date, said once per window
+        // under its own mark (keyed by that reset, so it expires with it).
+        let wall = snapshot.atLimitResetsAt
+        let wallMark = wall.map { "\(id).wall.\(Int($0.timeIntervalSince1970))" }
+        let announcesWall = wallMark.map { announced[$0] == nil } ?? false
+        guard announces || schedules || announcesWall else { return }
         // Permission is read at the moment of delivery, and a threshold is
         // remembered only once delivered, so an alert macOS wasn't yet allowed
         // to show (at launch, or with the prompt still up) comes through on
@@ -91,13 +96,18 @@ final class UsageNotifier {
         // The account was removed while macOS was asked: nothing to say, and
         // nothing to remember for a read that no longer counts.
         guard !Task.isCancelled else { return }
-        if announces {
+        if announces, let crossed {
             remember(crossed, at: mark)
             var body = "\(crossed)% of your \(snapshot.ringWindowLabel) used."
             if let resets = snapshot.ringResetsAt {
                 body += " " + UsageFormatting.resetString(resets, now: now()).capitalizedFirst
             }
             deliver(request("\(id).threshold.\(crossed)", providerId: id, title: snapshot.displayName, body: body))
+        }
+        if announcesWall, let wall, let wallMark {
+            remember(100, at: wallMark)
+            let body = "Limit reached. " + UsageFormatting.resetString(wall, now: now()).capitalizedFirst + "."
+            deliver(request("\(id).wall", providerId: id, title: snapshot.displayName, body: body))
         }
         if schedules {
             scheduleReset(for: snapshot)

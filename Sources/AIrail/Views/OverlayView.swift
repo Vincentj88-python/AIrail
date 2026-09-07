@@ -304,11 +304,14 @@ struct OverlayView: View {
         // between refreshes.
         return TimelineView(.periodic(from: .now, by: 60)) { context in
             let pace = snapshot?.status == .ok ? snapshot?.pace(now: context.date) : nil
+            // At the wall the ring stays full and its centre counts down to
+            // the reset: the time until it lifts is the number that matters.
+            let wall = snapshot?.atLimitResetsAt
             ZStack {
                 Circle()
                     .stroke(info.color.opacity(0.18), lineWidth: 9)
                 Circle()
-                    .trim(from: 0, to: (percent ?? 0) / 100)
+                    .trim(from: 0, to: wall != nil ? 1 : (percent ?? 0) / 100)
                     .stroke(info.color, style: StrokeStyle(lineWidth: 9, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(.easeInOut(duration: 0.5), value: percent)
@@ -322,17 +325,26 @@ struct OverlayView: View {
                         .padding(11)
                 }
                 VStack(spacing: 1) {
-                    HStack(alignment: .firstTextBaseline, spacing: 1) {
-                        Text(percent.map { "\(Int($0.rounded()))" } ?? "—")
-                            .font(.system(size: 42, weight: .semibold))
+                    if let wall {
+                        Text(UsageFormatting.countdown(to: wall, now: context.date))
+                            .font(.system(size: 30, weight: .semibold))
                             .monospacedDigit()
-                            .contentTransition(.numericText(value: percent ?? 0))
-                            .animation(.default, value: percent)
-                        Text("%")
-                            .font(.system(size: 19, weight: .medium))
+                        Text("until reset")
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
+                    } else {
+                        HStack(alignment: .firstTextBaseline, spacing: 1) {
+                            Text(percent.map { "\(Int($0.rounded()))" } ?? "—")
+                                .font(.system(size: 42, weight: .semibold))
+                                .monospacedDigit()
+                                .contentTransition(.numericText(value: percent ?? 0))
+                                .animation(.default, value: percent)
+                            Text("%")
+                                .font(.system(size: 19, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    if let pace {
+                    if wall == nil, let pace {
                         Text("\(UsageFormatting.duration(hours: pace.remaining / 3600)) left")
                             .font(.caption2)
                             .monospacedDigit()
@@ -345,7 +357,7 @@ struct OverlayView: View {
         .padding(5)
         .accessibilityElement()
         .accessibilityLabel(label)
-        .accessibilityValue(percent.map { "\(Int($0.rounded())) percent" } ?? "unknown")
+        .accessibilityValue(UsageFormatting.spokenUsage(snapshot))
     }
 
     /// "≈ $340 of API-priced tokens this week" — what a subscription's usage

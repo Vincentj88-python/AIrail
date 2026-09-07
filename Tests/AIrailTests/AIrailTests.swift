@@ -900,6 +900,37 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(UsageSeverity.of(100), .critical)
     }
 
+    /// At the wall the captions count down to the reset of the window that
+    /// is spent — the later one if both are — and a limit with no reset date
+    /// keeps its "100%".
+    func testAtTheWallTheResetIsTheTarget() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let us = Locale(identifier: "en_US")
+        var s = UsageSnapshot.empty(providerId: "claude", displayName: "Claude", status: .ok)
+        XCTAssertNil(s.atLimitResetsAt)
+        s.sessionPercent = 99.7
+        s.resetsAt = now.addingTimeInterval(3600)
+        s.weeklyPercent = 40
+        s.weeklyResetsAt = now.addingTimeInterval(3 * 86400)
+        XCTAssertEqual(s.atLimitResetsAt, now.addingTimeInterval(3600), "99.5 and up is the wall the captions already round to")
+        s.sessionPercent = 40
+        s.weeklyPercent = 100
+        XCTAssertEqual(s.atLimitResetsAt, now.addingTimeInterval(3 * 86400), "a spent week with a live session still counts down to the week")
+        XCTAssertEqual(s.peakPercent, 100, "and the hairline judges the peak window, not the ring's")
+        s.sessionPercent = 100
+        XCTAssertEqual(s.atLimitResetsAt, now.addingTimeInterval(3 * 86400), "both spent: the later reset")
+        var key = UsageSnapshot.empty(providerId: "openrouter", displayName: "OpenRouter", status: .ok)
+        key.weeklyPercent = 100
+        XCTAssertNil(key.atLimitResetsAt, "no reset date, no countdown")
+
+        XCTAssertEqual(UsageFormatting.countdown(to: now.addingTimeInterval(72 * 60), now: now, locale: us), "1h 12m")
+        XCTAssertEqual(UsageFormatting.countdown(to: now.addingTimeInterval(12 * 86400 + 3 * 3600), now: now, locale: us), "12d 3h")
+        XCTAssertEqual(UsageFormatting.countdown(to: now, now: now), "resetting…", "never 0m or a negative span before the next read")
+        XCTAssertEqual(UsageFormatting.spokenUsage(s, now: now), "limit reached, resets in " + UsageFormatting.duration(hours: 72))
+        XCTAssertEqual(UsageFormatting.spokenUsage(key, now: now), "100 percent used")
+        XCTAssertEqual(UsageFormatting.spokenUsage(nil, now: now), "no data")
+    }
+
     /// Pace is arithmetic on two live numbers and the clock: percent used
     /// against the share of the window that has elapsed.
     func testPaceMath() throws {

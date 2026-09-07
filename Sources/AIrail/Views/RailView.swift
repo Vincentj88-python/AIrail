@@ -95,7 +95,7 @@ struct RailView: View {
     /// peripheral warning without opening anything.
     private var railAccent: Color {
         let peak = manager.railProviderInfos
-            .compactMap { manager.snapshot(for: $0.id)?.ringPercent }
+            .compactMap { manager.snapshot(for: $0.id)?.peakPercent }
             .max()
         return UsageSeverity.of(peak).accent
     }
@@ -177,12 +177,10 @@ private struct ExpandedRailContent: View {
                 Text(info.displayName)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.white.opacity(0.92))
-                Text(snapshot?.ringPercent.map { "\(Int($0.rounded()))%" } ?? "—")
+                percentCaption(snapshot)
                     .font(.system(size: 10.5, weight: .regular))
                     .foregroundStyle(.white.opacity(0.55))
                     .monospacedDigit()
-                    .contentTransition(.numericText(value: snapshot?.ringPercent ?? 0))
-                    .animation(.default, value: snapshot?.ringPercent)
             }
             .lineLimit(1)
         }
@@ -191,9 +189,22 @@ private struct ExpandedRailContent: View {
         .help(helpText(info: info, snapshot: snapshot))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(info.displayName)
-        .accessibilityValue(
-            snapshot?.ringPercent.map { "\(Int($0.rounded())) percent used" } ?? "no data"
-        )
+        .accessibilityValue(UsageFormatting.spokenUsage(snapshot))
+    }
+
+    /// The percent — or, at the wall, the time until it lifts, ticking once
+    /// a minute. That is the one moment people stare at the rail.
+    @ViewBuilder
+    private func percentCaption(_ snapshot: UsageSnapshot?) -> some View {
+        if let wall = snapshot?.atLimitResetsAt {
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                Text(UsageFormatting.countdown(to: wall, now: context.date))
+            }
+        } else {
+            Text(snapshot?.ringPercent.map { "\(Int($0.rounded()))%" } ?? "—")
+                .contentTransition(.numericText(value: snapshot?.ringPercent ?? 0))
+                .animation(.default, value: snapshot?.ringPercent)
+        }
     }
 
     private var card: some View {
@@ -201,6 +212,9 @@ private struct ExpandedRailContent: View {
     }
 
     private func helpText(info: ProviderInfo, snapshot: UsageSnapshot?) -> String {
+        if let wall = snapshot?.atLimitResetsAt {
+            return "\(info.displayName) — limit reached, resets in \(UsageFormatting.countdown(to: wall))"
+        }
         if let percent = snapshot?.ringPercent {
             return "\(info.displayName) — \(Int(percent.rounded()))%"
         }

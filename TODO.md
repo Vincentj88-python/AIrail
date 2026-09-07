@@ -71,6 +71,28 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## At the wall, lead with the time (2026-09-07)
+
+Block B. `UsageSnapshot.atLimitResetsAt` is the reset of a window that is
+spent (≥ 99.5 %, what the captions already round to "100%") — the later one
+if both are — so a spent week with a half-used session still counts as the
+wall; nil for a limit with no reset date (a key's balance keeps "100%").
+`peakPercent` is the higher of the two windows, and both `railAccent`s now
+judge it instead of the session-first `ringPercent`, closing the same blind
+spot in the hairline. `UsageFormatting.countdown(to:)` ("1h 12m", "12d 3h",
+"resetting…" once passed and before the next read confirms the fresh window)
+shares the duration formatter; `spokenUsage` is the VoiceOver value for every
+mark. At the wall the rail caption, the island caption and the HUD ring
+centre show the countdown inside a once-a-minute `TimelineView` (the ring
+stays full in the provider colour, "until reset" under the time); otherwise
+nothing changes. `UsageNotifier` gains a "Limit reached. Resets Mon 9:00 AM."
+alert under its own mark keyed by that reset (said once per window, expires
+with it) alongside the 75/90 thresholds; the reset alert is still only
+scheduled once a threshold is crossed. No `.timeSensitive` level (needs an
+entitlement). Demo data can't trigger any of this (the walk clamps at 97).
+Tests: target selection and formatting in `testAtTheWallTheResetIsTheTarget`,
+the alert's 80 → 100 → fresh-window path in ProviderManagerTests. 83 green (+2).
+
 ## Pace against the window (2026-09-07)
 
 Block B. The session window was a hard-coded `resetsAt − 5 h` in the HUD;

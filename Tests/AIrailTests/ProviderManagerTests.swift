@@ -354,6 +354,33 @@ final class ProviderManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testTheWallAlertNamesTheResetAndFiresOncePerWindow() async throws {
+        let clock = TestClock()
+        let inbox = NotificationInbox()
+        let notifier = try makeNotifier(inbox, clock: clock)
+        var resets = clock.now.addingTimeInterval(3600)
+        func consider(_ percent: Double) async {
+            await notifier.consider(Self.snapshot("claude", percent: percent, resetsAt: resets), enabled: true)
+        }
+
+        await consider(80)
+        XCTAssertEqual(inbox.bodies.count, 1)
+        await consider(100)
+        XCTAssertEqual(inbox.bodies.count, 3, "90 and the wall arrive together")
+        XCTAssertTrue(inbox.bodies[2].hasPrefix("Limit reached. Resets "), inbox.bodies[2])
+        XCTAssertEqual(inbox.alerts.last?.identifier, "claude.wall")
+        await consider(100)
+        XCTAssertEqual(inbox.bodies.count, 3, "the wall is said once per window")
+
+        clock.advance(by: 3600)
+        resets = clock.now.addingTimeInterval(5 * 3600)
+        await consider(5)
+        XCTAssertEqual(inbox.bodies.count, 3)
+        await consider(100)
+        XCTAssertEqual(inbox.bodies.count, 5, "a fresh window: 90 and the wall again")
+    }
+
+    @MainActor
     func testNotifierRemembersTheWindowAcrossRelaunchAndWaitsForPermission() async throws {
         let clock = TestClock()
         let inbox = NotificationInbox()

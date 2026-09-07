@@ -87,6 +87,28 @@ extension UsageSnapshot {
         sessionPercent != nil ? "session" : periodLabel
     }
 
+    /// The higher of the two windows' figures: what the wall and the rail's
+    /// colour should look at, since a spent week with a half-used session is
+    /// still a wall.
+    var peakPercent: Double? {
+        [sessionPercent, weeklyPercent].compactMap { $0 }.max().map(Self.clampPercent)
+    }
+
+    /// When the wall lifts: the reset of a window that is spent (≥ 99.5%),
+    /// the later one if both are. Nil while there is headroom, and for a
+    /// limit with no reset date (a key's balance), which keeps its "100%".
+    var atLimitResetsAt: Date? {
+        var resets: [Date] = []
+        if let session = sessionPercent, session >= 99.5, let reset = resetsAt {
+            resets.append(reset)
+        }
+        if let weekly = weeklyPercent, weekly >= 99.5,
+           let reset = weeklyResetsAt ?? (sessionPercent == nil ? resetsAt : nil) {
+            resets.append(reset)
+        }
+        return resets.max()
+    }
+
     /// The session window as an interval, when there is one and its bounds are known.
     var sessionWindow: DateInterval? {
         guard sessionPercent != nil, let end = resetsAt, let length = sessionWindowLength, length > 0 else { return nil }
@@ -180,6 +202,23 @@ enum UsageFormatting {
             return "resets " + weekdayTime(date, locale: locale)
         }
         return "resets " + date.formatted(Date.FormatStyle(locale: locale).day().month(.abbreviated))
+    }
+
+    /// "1h 12m" or "12d 3h" until `date`; "resetting…" once it has passed
+    /// and the next read hasn't yet confirmed the fresh window.
+    static func countdown(to date: Date, now: Date = Date(), locale: Locale = .autoupdatingCurrent) -> String {
+        let seconds = date.timeIntervalSince(now)
+        guard seconds > 0 else { return "resetting…" }
+        return duration(hours: seconds / 3600, locale: locale)
+    }
+
+    /// What a mark says to VoiceOver: "62 percent used", or at the wall
+    /// "limit reached, resets in 1h 12m", or "no data".
+    static func spokenUsage(_ snapshot: UsageSnapshot?, now: Date = Date()) -> String {
+        if let wall = snapshot?.atLimitResetsAt {
+            return "limit reached, resets in " + countdown(to: wall, now: now)
+        }
+        return snapshot?.ringPercent.map { "\(Int($0.rounded())) percent used" } ?? "no data"
     }
 
     /// "Mon 9:00 AM" / "Mon 09:00" — a moment within the week.
