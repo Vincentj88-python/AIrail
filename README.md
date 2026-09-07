@@ -88,7 +88,7 @@ Because AIrail reads the sign-ins of the tools you connect, it isn't sandboxed a
 2. Go to **System Settings › Privacy & Security**, scroll down, and click **Open Anyway** (on macOS 15 and later the old right-click › Open trick no longer works).
 3. You only do this once. After that it launches normally, and updates keep it that way.
 
-Once the repository is public there will also be a Homebrew tap: `brew install --cask vincentj88-python/airail/airail`. Notarized builds — no warning at all — follow as soon as there is a Developer ID; a GitHub Sponsors goal covers exactly that.
+Or with Homebrew: `brew install --cask vincentj88-python/airail/airail`. Notarized builds — no warning at all — follow as soon as there is a Developer ID; a GitHub Sponsors goal covers exactly that.
 
 The app has no Dock icon — look for the faint hairline on the edge of your screen (or the notch/island, depending on your settings).
 
