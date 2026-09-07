@@ -110,8 +110,9 @@ enum OpenRouterUsage {
     /// month, `limit_reset` "daily"/"weekly"/"monthly" or null for a limit that never resets;
     /// `/credits`: `{"data": {"total_credits", "total_usage"}}`. All amounts in USD.
     static func snapshot(keyData: Data, creditsData: Data?, providerId: String, displayName: String, now: Date = Date()) throws -> UsageSnapshot {
-        guard let key = try JSONObject(data: keyData)["data"] else {
-            throw ConnectionError.unreadable("no key data in response")
+        let keyJSON = try JSONObject(data: keyData)
+        guard let key = keyJSON["data"] else {
+            throw ConnectionError.shapeChanged(tool: displayName, detail: keyJSON.keyNames)
         }
         let usage = key.double("usage")
         let monthly = key.double("usage_monthly")
@@ -174,7 +175,7 @@ enum DeepSeekUsage {
         let json = try JSONObject(data: data)
         let balances = json.array("balance_infos")
         guard let balance = balances.first(where: { $0.string("currency") == "USD" }) ?? balances.first else {
-            throw ConnectionError.unreadable("no balance in response")
+            throw ConnectionError.shapeChanged(tool: displayName, detail: json.keyNames)
         }
         var snapshot = UsageSnapshot.empty(providerId: providerId, displayName: displayName, status: .ok)
         snapshot.credits = balance.double("total_balance")

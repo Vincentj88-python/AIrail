@@ -104,13 +104,13 @@ enum CopilotUsage {
     static func parse(_ data: Data, locale: Locale = .autoupdatingCurrent) throws -> Report {
         let json = try JSONObject(data: data)
         guard let snapshots = json["quota_snapshots"] else {
-            throw ConnectionError.unreadable("no quota in response")
+            throw ConnectionError.shapeChanged(tool: "GitHub", detail: json.keyNames)
         }
         let premium = snapshots["premium_interactions"]
         let hasPremium = premium.map { isUnlimited($0) || ($0.double("entitlement") ?? 0) > 0 } ?? false
         let meterName = hasPremium ? "premium_interactions" : "chat"
         guard let meter = snapshots[meterName] else {
-            throw ConnectionError.unreadable("no usable quota meter")
+            throw ConnectionError.shapeChanged(tool: "GitHub", detail: snapshots.keyNames)
         }
         let creditsBilled = hasPremium
             && (json.bool("token_based_billing") == true || premium?.bool("token_based_billing") == true)

@@ -60,6 +60,10 @@ enum HTTPClient {
         return try await send(url, method: "POST", headers: headers, body: data, timeout: timeout)
     }
 
+    /// A test-only tap on every reply, for recording redacted fixtures
+    /// (`LiveProviderTests`). Set before any request; never set by the app.
+    nonisolated(unsafe) static var recorder: (@Sendable (URL, Data) -> Void)?
+
     private static func send(_ url: URL, method: String, headers: [String: String], body: Data?, timeout: TimeInterval) async throws -> Response {
         try check(url)
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
@@ -77,6 +81,7 @@ enum HTTPClient {
         }
         let http = response as? HTTPURLResponse
         let status = http?.statusCode ?? 0
+        recorder?(url, data)
         // A redirect gets this far only because `RedirectGuard` refused to
         // follow it, so say where it pointed rather than "HTTP 302".
         if (300..<400).contains(status), let location = http?.value(forHTTPHeaderField: "Location") {
@@ -190,6 +195,11 @@ enum HTTPClient {
             }
             return response.data
         case 401, 403:
+            // A JSON refusal is the service saying the sign-in is no good; an
+            // HTML page with that status is an edge or proxy, not the service.
+            guard (try? JSONSerialization.jsonObject(with: response.data)) != nil else {
+                throw ConnectionError.network("HTTP \(response.status), not a reply from the service")
+            }
             throw ConnectionError.expired(tool: tool)
         case 429:
             throw ConnectionError.rateLimited(tool: tool, retryAfter: response.retryAfter)
@@ -216,6 +226,11 @@ struct JSONObject {
 
     subscript(_ key: String) -> JSONObject? {
         (raw[key] as? [String: Any]).map(JSONObject.init)
+    }
+
+    /// The top-level keys, sorted — what a shape-drift error reports.
+    var keyNames: String {
+        "keys: " + (raw.keys.sorted().joined(separator: ", ").isEmpty ? "none" : raw.keys.sorted().joined(separator: ", "))
     }
 
     func string(_ key: String) -> String? {

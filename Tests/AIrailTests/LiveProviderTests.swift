@@ -5,9 +5,23 @@ import XCTest
 /// Skipped unless `AIRAIL_LIVE=1` (`TEST_RUNNER_AIRAIL_LIVE=1 xcodebuild test …`),
 /// because they hit real endpoints and depend on which tools are installed.
 final class LiveProviderTests: XCTestCase {
+    /// Every reply is noted; with `AIRAIL_RECORD_FIXTURES=1` it is written to
+    /// Tests/AIrailTests/Fixtures, redacted, and otherwise it is checked
+    /// against the fixture already there — so a moved endpoint fails here
+    /// before it fails on someone's rail.
+    private var recorder: FixtureRecorder?
 
     override func setUpWithError() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["AIRAIL_LIVE"] == "1", "set AIRAIL_LIVE=1 to run")
+        let recorder = FixtureRecorder(recording: ProcessInfo.processInfo.environment["AIRAIL_RECORD_FIXTURES"] == "1")
+        self.recorder = recorder
+        HTTPClient.recorder = { url, data in recorder.note(url, data) }
+    }
+
+    override func tearDownWithError() throws {
+        HTTPClient.recorder = nil
+        try recorder?.settle()
+        recorder = nil
     }
 
     @MainActor

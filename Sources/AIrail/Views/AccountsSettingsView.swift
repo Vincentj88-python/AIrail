@@ -217,8 +217,16 @@ private struct AccountDetailView: View {
                 Section {
                     Toggle("Show on rail", isOn: showOnRailBinding)
                     LabeledContent("Last read") {
-                        Text(lastReadText)
-                            .foregroundStyle(error == nil ? Color.secondary : .orange)
+                        VStack(alignment: .trailing, spacing: 3) {
+                            Text(lastReadText)
+                                .foregroundStyle(error == nil ? Color.secondary : .orange)
+                            if let error, case .shapeChanged(let tool, let detail) = error {
+                                // Nothing is sent by itself: this opens a prefilled
+                                // issue in the browser with the key names, no values.
+                                Link("Report…", destination: Self.reportURL(tool: tool, detail: detail))
+                                    .font(.callout)
+                            }
+                        }
                     }
                     if let account = snapshot?.account {
                         LabeledContent("Account") {
@@ -282,6 +290,19 @@ private struct AccountDetailView: View {
         parts.append(info.kind == .apiKey ? "by API key" : "via \(info.connection.toolName)")
         return parts.joined(separator: " · ")
     }
+
+    /// A new GitHub issue naming the tool and the keys AIrail saw — the
+    /// fastest way for a moved endpoint to reach whoever maintains the parser.
+    private static func reportURL(tool: String, detail: String) -> URL {
+        var components = URLComponents(string: "https://github.com/Vincentj88-python/AIrail/issues/new")!
+        components.queryItems = [
+            URLQueryItem(name: "title", value: "Endpoint changed: \(tool)"),
+            URLQueryItem(name: "body", value: "AIrail \(BuildInfo.version) could not read \(tool)'s usage reply.\n\n\(detail)\n\n(Key names only — no values were included.)"),
+        ]
+        return components.url ?? Self.fallbackIssuesURL
+    }
+
+    private static let fallbackIssuesURL = URL(string: "https://github.com/Vincentj88-python/AIrail/issues/new")!
 
     private var lastReadText: String {
         if let error { return error.errorDescription ?? error.shortDescription }

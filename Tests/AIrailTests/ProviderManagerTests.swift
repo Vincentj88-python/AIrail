@@ -350,6 +350,26 @@ final class ProviderManagerTests: XCTestCase {
         XCTAssertEqual(manager.snapshots["claude"]?.status, .stale)
     }
 
+    @MainActor
+    func testAMovedEndpointKeepsTheNumbersAndNudgesTheUpdateCheckOnce() async throws {
+        let fake = FakeProvider(id: "cursor", results: [
+            .success(Self.snapshot("cursor", percent: 40)),
+            .failure(.shapeChanged(tool: "Cursor", detail: "keys: a")),
+        ])
+        let (manager, settings) = try makeManager([fake])
+        var nudges: [String] = []
+        manager.onShapeChanged = { nudges.append($0) }
+        settings.connect("cursor")
+        await manager.refresh("cursor")
+        await manager.refresh("cursor", force: true)
+        XCTAssertEqual(manager.snapshots["cursor"]?.status, .stale)
+        XCTAssertEqual(manager.snapshots["cursor"]?.sessionPercent, 40, "the endpoint moved; the last real numbers stay")
+        XCTAssertEqual(manager.lastErrors["cursor"]?.isShapeChange, true)
+        XCTAssertEqual(nudges, ["cursor"])
+        await manager.refresh("cursor", force: true)
+        XCTAssertEqual(nudges, ["cursor"], "one quiet update check per account per launch")
+    }
+
     // MARK: Membership
 
     @MainActor

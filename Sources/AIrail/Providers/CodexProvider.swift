@@ -106,7 +106,7 @@ enum CodexUsage {
     static func parse(_ data: Data) throws -> Report {
         let json = try JSONObject(data: data)
         guard let limits = json["rate_limit"] else {
-            throw ConnectionError.unreadable("no rate limits in response")
+            throw ConnectionError.shapeChanged(tool: "Codex", detail: json.keyNames)
         }
         var report = Report()
         for key in ["primary_window", "secondary_window"] {
@@ -124,7 +124,7 @@ enum CodexUsage {
             }
         }
         guard report.sessionPercent != nil || report.weeklyPercent != nil else {
-            throw ConnectionError.unreadable("no usage windows in response")
+            throw ConnectionError.shapeChanged(tool: "Codex", detail: limits.keyNames)
         }
         report.plan = planLabel(json.string("plan_type"))
         report.email = json.string("email")

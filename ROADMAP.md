@@ -226,7 +226,7 @@ Five ordered blocks; each lands before the next touches the same files. v0.2.1 =
 
 ### Block E — Trust and go-public (6 items, ≈ 16 days)
 
-- [ ] **Endpoint drift detection** · 2–4 days · wow 2/5 · `drift-detection-fixtures`
+- [x] **Endpoint drift detection** (record the first fixtures by hand — see TODO.md) · 2–4 days · wow 2/5 · `drift-detection-fixtures`
   Shape drift gets an honest error and update nudge; recorded, redacted fixtures catch it before users do.
   - How: ConnectionError.shapeChanged(tool:detail:) (transient; 'Cursor sent usage data in a form AIrail can't read yet. Check for an update.') thrown by the six 2xx-but-keys-missing guards with sorted key names, and by HTTPClient.unwrap when the body is not JSON (fixes 403-HTML → 'sign-in expired'). First .shapeChanged per provider per launch calls UpdateChecker.checkQuietly(); OverlayView.notice adds 'Check for Updates…' for that case; AccountDetailView adds a 'Report…' Link with key names. LiveProviderTests: a RecordingURLProtocol under AIRAIL_RECORD_FIXTURES=1 writing allow-list-redacted bodies to Fixtures/, a JSONShape.paths helper and a fixture ⊆ live assertion. Codex session-log fallback deferred.
   - Why here: Block E: the recorder is the enabler for the TODO's 'verify keyed parsers against real keys', which gates Mistral/xAI and the cost lines on API accounts; the nudge only becomes visible once the repo is public.

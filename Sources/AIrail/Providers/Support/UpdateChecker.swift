@@ -88,6 +88,14 @@ enum UpdateChecker {
         Task { await check(userInitiated: false) }
     }
 
+    /// A look right now, regardless of the daily stamp, that only speaks up
+    /// when there is a newer version: for the moment an endpoint's shape has
+    /// moved under a parser and a newer AIrail is the likely fix.
+    static func checkQuietly() {
+        UserDefaults.standard.set(Date(), forKey: lastCheckKey)
+        Task { await check(userInitiated: false) }
+    }
+
     /// What the menu item says: the release the last check found, else the ask.
     static func menuTitle(for release: Release?) -> String {
         release.map { "Update to \($0.version)…" } ?? "Check for Updates…"

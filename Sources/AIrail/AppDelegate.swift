@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // in must not poll live endpoints (or prompt for the Keychain) too.
         if !LaunchOptions.isRunningTests {
             HTTPClient.removeLegacyStores() // v0.2.0's cache and cookie jar, before the first read
+            providerManager.onShapeChanged = { _ in UpdateChecker.checkQuietly() }
             providerManager.start()
             UpdateChecker.startBackgroundChecks { [weak self] release in
                 self?.uiState.availableUpdate = release // the menus read "Update to x.y.z…"

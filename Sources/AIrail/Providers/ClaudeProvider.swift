@@ -176,7 +176,7 @@ enum ClaudeUsage {
             report.extraCap = extra.double("monthly_limit").map { $0 / scale }
         }
         guard report.sessionPercent != nil || report.weeklyPercent != nil else {
-            throw ConnectionError.unreadable("no usage windows in response")
+            throw ConnectionError.shapeChanged(tool: "Claude Code", detail: json.keyNames)
         }
         return report
     }

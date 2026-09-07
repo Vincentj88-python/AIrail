@@ -166,6 +166,16 @@ struct OverlayView: View {
                         Text("The \(snapshot.expiredWindowLabel ?? "usage") window reset \(UsageFormatting.weekdayTime(reset)) — nothing has been read since.")
                             .foregroundStyle(.secondary)
                     }
+                    if error.isShapeChange {
+                        Button(UpdateChecker.menuTitle(for: ui.availableUpdate)) {
+                            if let release = ui.availableUpdate {
+                                UpdateChecker.show(release)
+                            } else {
+                                UpdateChecker.checkForUpdates()
+                            }
+                        }
+                        .buttonStyle(.link)
+                    }
                 }
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)

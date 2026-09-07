@@ -272,6 +272,12 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(UsageFormatting.clockString(Date().addingTimeInterval(5)), "shortly")
         XCTAssertTrue(UsageFormatting.clockString(soon).hasPrefix("at "))
         XCTAssertTrue(ConnectionError.offline.isTransient, "offline keeps the last numbers")
+        let drift = ConnectionError.shapeChanged(tool: "Cursor", detail: "keys: a, b")
+        XCTAssertTrue(drift.isTransient, "a moved endpoint keeps the last numbers as stale")
+        XCTAssertTrue(drift.isShapeChange)
+        XCTAssertFalse(ConnectionError.offline.isShapeChange)
+        XCTAssertEqual(drift.errorDescription, "Cursor sent usage data in a form AIrail can't read yet. Check for an update.")
+        XCTAssertEqual(drift.shortDescription, "Unexpected data — check for update")
         XCTAssertTrue(ConnectionError.offline.isNetworkOutage)
         XCTAssertTrue(ConnectionError.network("x").isNetworkOutage)
         XCTAssertFalse(ConnectionError.expired(tool: "T").isNetworkOutage)
@@ -1292,6 +1298,55 @@ final class AIrailTests: XCTestCase {
         merged.merge(week)
         merged.merge(week)
         XCTAssertEqual(merged.splits[UsageKey(model: "claude-opus-4-8", project: "app")]?.total, opusInApp.total * 2, "splits add up across buckets")
+    }
+
+    /// A reply that parses as JSON but lacks the keys a parser needs is the
+    /// endpoint moving, not the sign-in failing: every guard names the keys
+    /// it saw, and the error is transient.
+    func testMissingKeysAreReportedAsShapeDrift() {
+        func drift(_ block: () throws -> Any) -> ConnectionError? {
+            do { _ = try block(); return nil } catch { return error as? ConnectionError }
+        }
+        let odd = Data(#"{"zeta":1,"alpha":{"x":2}}"#.utf8)
+        let cases: [(String, () throws -> Any)] = [
+            ("Claude Code", { try ClaudeUsage.parse(odd) }),
+            ("Codex", { try CodexUsage.parse(odd) }),
+            ("Cursor", { try CursorUsage.parse(odd) }),
+            ("GitHub", { try CopilotUsage.parse(odd) }),
+            ("OpenRouter", { try OpenRouterUsage.snapshot(keyData: odd, creditsData: nil, providerId: "openrouter", displayName: "OpenRouter") }),
+            ("DeepSeek", { try DeepSeekUsage.snapshot(data: odd, providerId: "deepseek", displayName: "DeepSeek") }),
+        ]
+        for (tool, block) in cases {
+            guard case .shapeChanged(let named, let detail)? = drift(block) else {
+                return XCTFail("\(tool) did not report shape drift")
+            }
+            XCTAssertEqual(named, tool)
+            XCTAssertEqual(detail, "keys: alpha, zeta", "\(tool) names the keys it saw, sorted")
+        }
+        XCTAssertEqual(JSONObject([:]).keyNames, "keys: none")
+    }
+
+    /// The fixture tooling: a document's key paths, and a redacted copy that
+    /// keeps the shape and the plan/model/date strings but nothing personal.
+    func testJSONShapePathsAndRedaction() throws {
+        let object: [String: Any] = [
+            "rate_limit": ["primary_window": ["used_percent": 40, "reset_at": 1]],
+            "email": "v@example.com", "plan_type": "plus",
+            "items": [["id": "x", "model": "m"]],
+        ]
+        let paths = JSONShape.paths(of: object)
+        XCTAssertTrue(paths.isSuperset(of: ["rate_limit", "rate_limit.primary_window.used_percent", "items[].model", "email"]), "\(paths)")
+        let redacted = try XCTUnwrap(JSONShape.redacted(object) as? [String: Any])
+        XCTAssertEqual(redacted["email"] as? String, "…")
+        XCTAssertEqual(redacted["plan_type"] as? String, "plus")
+        let items = try XCTUnwrap(redacted["items"] as? [[String: Any]])
+        XCTAssertEqual(items.first?["id"] as? String, "…")
+        XCTAssertEqual(items.first?["model"] as? String, "m")
+        XCTAssertEqual(JSONShape.paths(of: JSONShape.redacted(object)), paths, "redaction keeps the shape")
+        XCTAssertEqual(
+            JSONShape.fixtureURL(for: URL(string: "https://api.anthropic.com/api/oauth/usage")!).lastPathComponent,
+            "api.anthropic.com_api_oauth_usage.json"
+        )
     }
 
     /// A populated per-model weekly bucket becomes a meter under the ring; a

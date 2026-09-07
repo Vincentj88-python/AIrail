@@ -30,6 +30,10 @@ final class ProviderManager: ObservableObject {
     /// The "used elsewhere" observation per account, when the session figure
     /// moved while this Mac's tool wrote nothing.
     @Published private(set) var elsewhere: [String: UsageElsewhere] = [:]
+    /// Called once per account per launch when its endpoint's shape moved —
+    /// the app hooks the quiet update check to it.
+    var onShapeChanged: (@MainActor (String) -> Void)?
+    private var shapeNudged: Set<String> = []
     private var elsewhereWatches: [String: UsageElsewhere.Watch] = [:]
 
     private let settings: AppSettings
@@ -431,6 +435,9 @@ final class ProviderManager: ObservableObject {
             let failure = (error as? ConnectionError) ?? .unreadable(error.localizedDescription)
             lastErrors[providerId] = failure
             applyBackoff(providerId, failure: failure)
+            if failure.isShapeChange, shapeNudged.insert(providerId).inserted {
+                onShapeChanged?(providerId)
+            }
             // Keep the last real reading on screen when the failure is
             // just "couldn't refresh"; blank it when the sign-in is gone.
             if failure.isTransient, let previous = lastLive[providerId] {

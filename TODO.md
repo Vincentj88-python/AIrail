@@ -74,6 +74,35 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Endpoint drift detection (2026-09-07)
+
+Block E, first of the items that need no Developer ID. A reply that parses
+as JSON but lacks the keys a parser needs used to be `.unreadable` — a hard
+error that blanked the account and read "Couldn't read the local data". It
+is now `ConnectionError.shapeChanged(tool:detail:)`: transient (the last
+real numbers stay as stale), worded "Cursor sent usage data in a form AIrail
+can't read yet. Check for an update.", thrown by the six 2xx-but-keys-missing
+guards (Claude, Codex ×2, Cursor, Copilot ×2, OpenRouter, DeepSeek) with the
+top-level keys it saw, sorted (`JSONObject.keyNames`, names only, never
+values). Local-file guards stay `.unreadable`. A 401/403 whose body isn't
+JSON is an edge page, not the service, so it is `.network(…)` rather than
+"sign-in expired" (a 2xx that isn't JSON stayed `.network` too — a captive
+portal is not drift). The first shape change per account per launch calls
+`UpdateChecker.checkQuietly()` (bypasses the daily stamp, only speaks up
+when newer; a silent no-op while the repo is private) through
+`ProviderManager.onShapeChanged`; the HUD's notice gains the update button
+and the account page a "Report…" link that opens a prefilled GitHub issue
+with the key names — nothing is ever sent by itself. **Fixtures:** the
+test-only `HTTPClient.recorder` tap, `JSONShape` (key paths, allow-list
+redaction) and `FixtureRecorder` in `Tests/AIrailTests/Fixtures.swift`;
+`LiveProviderTests` records redacted replies to `Tests/AIrailTests/Fixtures/`
+under `AIRAIL_RECORD_FIXTURES=1` and otherwise asserts every fixture key path
+is still sent. No fixtures are recorded yet: run it once with
+`TEST_RUNNER_AIRAIL_LIVE=1 TEST_RUNNER_AIRAIL_RECORD_FIXTURES=1` on this Mac
+(Claude prompts for the Keychain) and again with the first real keyed-platform
+keys — that is the "verify keyed parsers" enabler. The Codex session-log
+fallback stays deferred. 95 green (+3).
+
 ## Ambient headroom: gauge and caption (2026-09-07)
 
 Block C. `HeadroomSummary` (UsageInsights) is the one reading the collapsed

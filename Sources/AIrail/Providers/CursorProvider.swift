@@ -184,7 +184,7 @@ enum CursorUsage {
     static func parse(_ data: Data) throws -> Report {
         let json = try JSONObject(data: data)
         guard let usage = json["individualUsage"], let plan = usage["plan"] else {
-            throw ConnectionError.unreadable("no plan usage in response")
+            throw ConnectionError.shapeChanged(tool: "Cursor", detail: json.keyNames)
         }
         let unlimited = json.bool("isUnlimited") ?? false
         return Report(

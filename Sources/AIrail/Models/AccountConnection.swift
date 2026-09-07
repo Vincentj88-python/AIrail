@@ -36,6 +36,10 @@ enum ConnectionError: LocalizedError, Sendable {
     case network(String)
     /// The Mac has no network path at all; nothing was tried.
     case offline
+    /// The service answered, but not in the shape AIrail's parser knows — an
+    /// endpoint that moved under us. Transient: the last real numbers stay,
+    /// and a newer AIrail is the likely fix.
+    case shapeChanged(tool: String, detail: String)
     /// A request or redirect to a host that isn't on `HTTPClient.allowedHosts`
     /// — a bug in AIrail's own code paths, never something a retry fixes.
     case blockedHost(String)
@@ -66,6 +70,8 @@ enum ConnectionError: LocalizedError, Sendable {
             return "Couldn't reach the service: \(detail)"
         case .offline:
             return "You're offline. The last numbers stay until the network is back."
+        case .shapeChanged(let tool, _):
+            return "\(tool) sent usage data in a form AIrail can't read yet. Check for an update."
         case .blockedHost(let host):
             return "AIrail doesn't connect to \(host); it only talks to the services it lists."
         case .unsupported:
@@ -87,6 +93,7 @@ enum ConnectionError: LocalizedError, Sendable {
         case .unreadable: return "Couldn't read local data"
         case .network: return "Couldn't reach service"
         case .offline: return "Offline"
+        case .shapeChanged: return "Unexpected data — check for update"
         case .blockedHost: return "Host not on AIrail's list"
         case .unsupported: return "Not supported yet"
         }
@@ -96,7 +103,7 @@ enum ConnectionError: LocalizedError, Sendable {
     /// we just couldn't refresh) as opposed to one that means the data is gone.
     var isTransient: Bool {
         switch self {
-        case .expired, .network, .offline, .accessDenied, .rateLimited, .temporarilyUnavailable: return true
+        case .expired, .network, .offline, .shapeChanged, .accessDenied, .rateLimited, .temporarilyUnavailable: return true
         case .notInstalled, .notSignedIn, .missingKey, .invalidKey, .unreadable, .blockedHost, .unsupported: return false
         }
     }
@@ -107,6 +114,12 @@ enum ConnectionError: LocalizedError, Sendable {
         case .offline, .network: return true
         default: return false
         }
+    }
+
+    /// The endpoint's shape moved: worth a quiet look for a newer AIrail.
+    var isShapeChange: Bool {
+        if case .shapeChanged = self { return true }
+        return false
     }
 
     /// The symbol beside the message: no Wi-Fi for offline, a warning otherwise.
