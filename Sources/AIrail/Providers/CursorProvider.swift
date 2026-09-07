@@ -249,10 +249,10 @@ enum CursorUsage {
             meters.append(UsageMeter(name: "Included usage", percent: total))
         }
         if let auto = report.autoPercentUsed {
-            meters.append(UsageMeter(name: "Auto mode", percent: auto, note: report.autoMessage))
+            meters.append(UsageMeter(name: "Cursor models", percent: auto, note: report.autoMessage))
         }
         if let api = report.apiPercentUsed {
-            meters.append(UsageMeter(name: "API models", percent: api, note: report.apiMessage))
+            meters.append(UsageMeter(name: "Other models", percent: api, note: report.apiMessage))
         }
         return UsageDetail(
             hours: events.isEmpty ? [] : UsageBucketing.series(hours, count: 24, component: .hour, endingAt: now, calendar: calendar),

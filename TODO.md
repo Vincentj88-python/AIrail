@@ -71,6 +71,28 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Read the 2026 meters (2026-09-07)
+
+Block B. The research claimed Copilot grew session/weekly lanes and Codex Pro
+lost its five-hour window; the skeptic checked the endpoints and typings and
+found neither — GitHub's `copilot_internal/user` still carries only the three
+`quota_snapshots`, and OpenAI's pricing page lists five-hour windows for every
+plan. What did change is the unit: monthly Copilot plans bill **AI credits**
+(1 credit = $0.01) since June 2026, flagged `token_based_billing` at the root
+and on the premium snapshot, and paid plans mark chat/completions unlimited
+with a `-1` sentinel. `CopilotUsage.parse` now: names the pool "AI credits"
+under that flag (legacy annual plans keep "Premium requests"), treats `-1` as
+unlimited, and puts "1 credit = $0.01 · ≈ $9.23 of $15.00" (plus "· 120 over
+plan" when `overage_count` > 0) in the meter's note — GitHub's own figures,
+never a computed flex pool. `UsageSnapshot.unitLabel` ("requests" by default,
+"AI credits" here) feeds the "monthly AI credits" line under the big numbers
+and its VoiceOver value; `periodLabel` for credits is plain "monthly".
+Cursor's two included pools are named as its dashboard names them: "Cursor
+models" and "Other models". No Codex caption was added: a missing window is
+not evidence of an exempt plan. Fixture from the copilot-sdk typings — this
+Mac's Copilot account is Free, so the paid shape is unverified live. README
+rows updated. 74 green (+1).
+
 ## Live countdowns and locale formatting (2026-09-07)
 
 Block B, first item. `UsageFormatting` now follows the user's locale the way

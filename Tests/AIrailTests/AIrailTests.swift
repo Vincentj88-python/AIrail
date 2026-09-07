@@ -472,7 +472,39 @@ final class AIrailTests: XCTestCase {
         let snapshot = CopilotUsage.snapshot(report: report, providerId: "copilot", displayName: "Copilot")
         XCTAssertEqual(snapshot.ringPercent, 61.5)
         XCTAssertEqual(snapshot.periodLabel, "monthly premium")
+        XCTAssertEqual(snapshot.unitLabel, "requests")
         XCTAssertEqual(snapshot.status, .ok)
+    }
+
+    /// The 2026 shape: monthly plans bill AI credits (1 credit = $0.01) and
+    /// flag it with `token_based_billing`; chat and completions carry the
+    /// `-1` unlimited sentinel. Fixture from GitHub's copilot-sdk typings —
+    /// this Mac's account is Free, so the paid shape is not verifiable here.
+    func testCopilotParseReadsAICredits() throws {
+        let json = #"""
+        {"login":"octocat","copilot_plan":"pro","token_based_billing":true,"quota_reset_date":"2026-10-01",
+         "quota_snapshots":{
+           "chat":{"percent_remaining":100,"unlimited":false,"entitlement":-1,"remaining":-1},
+           "completions":{"percent_remaining":100,"unlimited":true,"entitlement":-1,"remaining":-1},
+           "premium_interactions":{"percent_remaining":38.47,"unlimited":false,"entitlement":1500,"remaining":577,
+             "credits_used":923,"overage_count":0,"overage_entitlement":500,"token_based_billing":true}}}
+        """#
+        let report = try CopilotUsage.parse(Data(json.utf8), locale: Locale(identifier: "en_US"))
+        XCTAssertEqual(report.meter, "credits")
+        XCTAssertEqual(report.used, 923)
+        XCTAssertEqual(report.limit, 1500)
+        XCTAssertEqual(report.plan, "Pro")
+        XCTAssertEqual(report.meters.map(\.name), ["AI credits", "Chat", "Completions"])
+        XCTAssertEqual(report.meters[0].note, "1 credit = $0.01 · ≈ $9.23 of $15.00")
+        XCTAssertEqual(report.meters[1].note, "Unlimited", "-1 is GitHub's unlimited sentinel, even without the flag")
+        let snapshot = CopilotUsage.snapshot(report: report, providerId: "copilot", displayName: "Copilot")
+        XCTAssertEqual(snapshot.periodLabel, "monthly")
+        XCTAssertEqual(snapshot.unitLabel, "AI credits")
+        XCTAssertEqual(snapshot.ringPercent.map { ($0 * 100).rounded() / 100 }, 61.53, "the ring stays GitHub's own percentage")
+        XCTAssertEqual(
+            CopilotUsage.creditsNote(used: 1620, entitlement: 1500, overage: 120, locale: Locale(identifier: "en_US")),
+            "1 credit = $0.01 · ≈ $16.20 of $15.00 · 120 over plan"
+        )
     }
 
     func testCopilotExtensionToken() {
@@ -544,7 +576,7 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(detail.week.sessions.count, 2)
         XCTAssertEqual(detail.byModel.first?.name, "claude-opus-5-low")
         XCTAssertEqual(detail.week.cost, (1.5952 + 291.9) / 100, accuracy: 0.0001)
-        XCTAssertEqual(detail.meters.map(\.name), ["Included usage", "Auto mode", "API models"])
+        XCTAssertEqual(detail.meters.map(\.name), ["Included usage", "Cursor models", "Other models"], "the pools carry their dashboard names")
         XCTAssertEqual(detail.meters[2].note, "api")
 
         let empty = CursorUsage.detail(events: [], report: report, days: 7, now: now, calendar: calendar)

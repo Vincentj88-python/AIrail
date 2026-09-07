@@ -27,8 +27,8 @@ AIrail never asks for a password and has no sign-in of its own. Every tool it tr
 | --- | --- | --- |
 | **Claude** | The sign-in Claude Code keeps in your Keychain (macOS asks you first) + your local transcripts in `~/.claude` | Real 5-hour and weekly limits from Anthropic, reset times, 24-hour and 7-day charts, usage by model and by project, thinking share, tool counts |
 | **Codex** *(covers ChatGPT)* | The sign-in Codex keeps in `~/.codex` + your local Codex sessions | Real 5-hour and weekly limits from OpenAI, reset times, 24-hour and 7-day charts, usage by model and by project, reasoning share, tool counts |
-| **Copilot** | Your GitHub CLI (`gh`) sign-in, or the Copilot editor extension's | Premium, chat and completion meters for the month, plan, reset date |
-| **Cursor** | The sign-in Cursor stores in its local database | Included / auto / API meters for the billing cycle, plan, cycle end, and the per-request feed behind the charts and usage by model |
+| **Copilot** | Your GitHub CLI (`gh`) sign-in, or the Copilot editor extension's | AI credits (or premium requests on a legacy plan), chat and completion meters for the month, plan, reset date |
+| **Cursor** | The sign-in Cursor stores in its local database | Included usage, Cursor-models and Other-models meters for the billing cycle, plan, cycle end, and the per-request feed behind the charts and usage by model |
 | **Gemini** | — | Coming soon: no dependable way to read its quota yet |
 | **Other…** | An API key you paste, kept in AIrail's own Keychain item | OpenRouter (credits used / remaining), DeepSeek (balance), Anthropic API and OpenAI API (organization usage by model and month-to-date cost, with an Admin key) |
 

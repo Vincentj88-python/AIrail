@@ -38,6 +38,9 @@ struct UsageSnapshot: Identifiable, Sendable {
     /// What the "weekly" numbers actually cover for this provider: some meter
     /// a calendar month or a billing cycle instead of a rolling week.
     var periodLabel: String = "weekly"
+    /// What `weeklyUsed` counts: "requests" for most plans, "AI credits" for
+    /// Copilot's credits-billed ones. Read as "\(periodLabel) \(unitLabel)".
+    var unitLabel: String = "requests"
     /// When the longer window resets, if the provider reports it separately.
     var weeklyResetsAt: Date? = nil
     /// Who is signed in (an email or handle), when the source reveals it.

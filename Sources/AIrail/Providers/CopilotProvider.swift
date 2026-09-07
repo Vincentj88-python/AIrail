@@ -12,7 +12,7 @@ final class CopilotProvider: UsageProviding {
     let connection = ConnectionMethod(
         toolName: "GitHub CLI",
         summary: "Uses your GitHub CLI sign-in",
-        explainer: "AIrail asks the GitHub CLI (gh) for the token it is signed in with and uses it to read your Copilot quota from GitHub — premium requests used this month, your plan, and when the quota resets. If gh isn't installed, the Copilot editor extension's saved sign-in is used instead. Nothing is written back."
+        explainer: "AIrail asks the GitHub CLI (gh) for the token it is signed in with and uses it to read your Copilot quota from GitHub — AI credits (or premium requests on a legacy plan) used this month, your plan, and when the quota resets. If gh isn't installed, the Copilot editor extension's saved sign-in is used instead. Nothing is written back."
     )
 
     let demoProfile = MockUsageEngine.Profile(
@@ -72,6 +72,8 @@ enum CopilotUsage {
     struct Report: Sendable {
         var plan: String?
         var login: String?
+        /// "credits" on a credits-billed plan, "premium" on a legacy
+        /// premium-request plan, "chat" when there is neither.
         var meter: String
         var used: Double?
         var limit: Double?
@@ -93,47 +95,55 @@ enum CopilotUsage {
         return nil
     }
 
-    /// `quota_snapshots` has one meter per feature. Premium requests are the
-    /// one people run out of; plans without any fall back to the chat meter.
-    static func parse(_ data: Data) throws -> Report {
+    /// `quota_snapshots` has one meter per feature. The premium pool is the
+    /// one people run out of — since June 2026 it is billed as AI credits
+    /// (1 credit = $0.01) on monthly plans, which the endpoint flags with
+    /// `token_based_billing`; annual plans that stayed on premium requests
+    /// keep the old shape. Plans without any premium pool fall back to chat.
+    /// A `-1` entitlement is GitHub's "unlimited" sentinel on paid plans.
+    static func parse(_ data: Data, locale: Locale = .autoupdatingCurrent) throws -> Report {
         let json = try JSONObject(data: data)
         guard let snapshots = json["quota_snapshots"] else {
             throw ConnectionError.unreadable("no quota in response")
         }
         let premium = snapshots["premium_interactions"]
-        let hasPremium = premium.map {
-            $0.bool("unlimited") == true || ($0.double("entitlement") ?? 0) > 0
-        } ?? false
+        let hasPremium = premium.map { isUnlimited($0) || ($0.double("entitlement") ?? 0) > 0 } ?? false
         let meterName = hasPremium ? "premium_interactions" : "chat"
         guard let meter = snapshots[meterName] else {
             throw ConnectionError.unreadable("no usable quota meter")
         }
-        let unlimited = meter.bool("unlimited") ?? false
+        let creditsBilled = hasPremium
+            && (json.bool("token_based_billing") == true || premium?.bool("token_based_billing") == true)
+        let unlimited = isUnlimited(meter)
         let entitlement = meter.double("entitlement")
         let remaining = meter.double("remaining")
         let percentRemaining = meter.double("percent_remaining") ?? (unlimited ? 100 : 0)
         let meters: [UsageMeter] = [
-            ("premium_interactions", "Premium requests"),
+            ("premium_interactions", creditsBilled ? "AI credits" : "Premium requests"),
             ("chat", "Chat"),
             ("completions", "Completions"),
         ].compactMap { key, label in
             guard let quota = snapshots[key] else { return nil }
-            let isUnlimited = quota.bool("unlimited") ?? false
+            let isUnlimited = isUnlimited(quota)
             let entitlement = quota.double("entitlement") ?? 0
             guard isUnlimited || entitlement > 0 else { return nil }
             let remaining = quota.double("remaining") ?? 0
+            let used = max(0, entitlement - remaining)
             return UsageMeter(
                 name: label,
                 percent: isUnlimited ? nil : UsageSnapshot.clampPercent(100 - (quota.double("percent_remaining") ?? 0)),
-                used: isUnlimited ? nil : max(0, entitlement - remaining),
+                used: isUnlimited ? nil : used,
                 limit: isUnlimited ? nil : entitlement,
-                note: isUnlimited ? "Unlimited" : nil
+                note: isUnlimited ? "Unlimited"
+                    : (creditsBilled && key == "premium_interactions"
+                       ? creditsNote(used: used, entitlement: entitlement, overage: quota.double("overage_count"), locale: locale)
+                       : nil)
             )
         }
         return Report(
             plan: planLabel(json.string("copilot_plan")),
             login: json.string("login"),
-            meter: meterName == "chat" ? "chat" : "premium",
+            meter: meterName == "chat" ? "chat" : (creditsBilled ? "credits" : "premium"),
             used: unlimited ? nil : zip(entitlement, remaining).map { max(0, $0 - $1) },
             limit: unlimited ? nil : entitlement,
             percentUsed: UsageSnapshot.clampPercent(100 - percentRemaining),
@@ -142,6 +152,21 @@ enum CopilotUsage {
                 ?? DateParsing.day(json.string("quota_reset_date")),
             meters: meters
         )
+    }
+
+    private static func isUnlimited(_ quota: JSONObject) -> Bool {
+        quota.bool("unlimited") == true || (quota.double("entitlement") ?? 0) < 0
+    }
+
+    /// "1 credit = $0.01 · ≈ $9.23 of $15.00", plus "· 120 over plan" once
+    /// the pool is exhausted — only what GitHub states, never a flex figure.
+    static func creditsNote(used: Double, entitlement: Double, overage: Double?, locale: Locale = .autoupdatingCurrent) -> String {
+        var note = "1 credit = \(UsageFormatting.dollars(0.01, locale: locale)) · ≈ "
+            + "\(UsageFormatting.dollars(used / 100, locale: locale)) of \(UsageFormatting.dollars(entitlement / 100, locale: locale))"
+        if let overage, overage > 0 {
+            note += " · \(Int(overage).formatted(.number.locale(locale))) over plan"
+        }
+        return note
     }
 
     static func planLabel(_ raw: String?) -> String? {
@@ -167,7 +192,8 @@ enum CopilotUsage {
             plan: report.plan,
             status: .ok,
             lastUpdated: now,
-            periodLabel: report.meter == "chat" ? "monthly chat" : "monthly premium",
+            periodLabel: report.meter == "chat" ? "monthly chat" : (report.meter == "credits" ? "monthly" : "monthly premium"),
+            unitLabel: report.meter == "credits" ? "AI credits" : "requests",
             weeklyResetsAt: report.resetsAt,
             account: report.login,
             detail: UsageDetail(meters: report.meters)

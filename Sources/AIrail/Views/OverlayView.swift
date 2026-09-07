@@ -186,7 +186,7 @@ struct OverlayView: View {
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                         }
-                        Text("\(period) requests")
+                        Text("\(period) \(snapshot?.unitLabel ?? "requests")")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .accessibilityHidden(true)
@@ -395,7 +395,7 @@ struct OverlayView: View {
     private func weeklyAccessibilityValue(snapshot: UsageSnapshot?) -> String {
         let period = snapshot?.periodLabel ?? "weekly"
         if let used = snapshot?.weeklyUsed, let limit = snapshot?.weeklyLimit {
-            return "\(Int(used)) of \(Int(limit)) \(period) requests"
+            return "\(Int(used)) of \(Int(limit)) \(period) \(snapshot?.unitLabel ?? "requests")"
         }
         if let percent = snapshot?.weeklyPercent {
             return "\(Int(percent.rounded())) percent of \(period) limit"
