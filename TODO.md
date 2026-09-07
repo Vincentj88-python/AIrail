@@ -23,24 +23,37 @@ Developer ID waits until AIrail has earned the $99, so the go-public step is a
 free soft launch with a Sponsors goal first, notarization + licence + Show HN
 after (see "Order of work" in `ROADMAP.md`).
 
-**v0.3.0 code is done (2026-09-06/07)** on branch `tier1-block-a`: all of
-block A (each item reviewed by a second agent, plus a polish pass), all of
-block B, the first three block C items (Top position, Core Animation
-hairline, ambient headroom) and the ID-free block E items (drift detection,
-About + diagnostics, Privacy pane, capture flags + launch prep); the dated
-sections below record each one. Everything is **staged, not committed**
-(commit per item or in one go, your call). Test suite: 44 → 99 green, 5 live
-tests skipped as before, and no test touches the network any more.
-**By hand before v0.3.0:** run the app and eyeball everything new (block B's
-card lines, the Top position on an external display, the hairline fill,
-the island caption, Settings › Privacy, the menu's About / Report / Save
-Diagnostics); measure the hairline's idle CPU (`top -pid`, target ≤ 0.3 %);
-re-create the "AIrail Dev" certificate with 10-year validity; run
-`scripts/screenshots.sh` and swap the README table to the captures; record
-the first endpoint fixtures (`AIRAIL_LIVE=1 AIRAIL_RECORD_FIXTURES=1`).
-**Then the soft launch** per "Order of work" in ROADMAP.md, and the rest of
-block C (glint, announcements, morph, style tokens, first-run, Dock
-etiquette, pinned rail), block D and tier 2 once the Developer ID exists.
+**v0.3.0 is tagged and built (2026-09-07).** `main` is at `v0.3.0` (33
+per-item commits replayed from the block A/B/C/E patches, then the bump,
+fixtures, captures), pushed. `dist/AIrail-0.3.0.dmg` (self-signed, hardened
+runtime, sha256 dc92c982…) is attached to a **draft** GitHub release with
+the 0.3.0 changelog as notes; `dist/homebrew-airail/Casks/airail.rb` is the
+cask for a tap repo that doesn't exist yet. Test suite 44 → 99 green.
+Recorded: four redacted endpoint fixtures (Copilot, Codex, Cursor ×2) and
+four README captures from a demo build. Not done, by choice: the 10-year
+certificate (`scripts/make-dev-cert.sh` is ready; the current one lasts to
+2027-09-02 and a Developer ID would replace it anyway, so re-creating it
+now only buys a Keychain re-prompt) and the hairline CPU measurement.
+
+**Left for Vincent, in order — the free soft launch:**
+1. `gh repo edit --visibility public` (irreversible in spirit: it gets
+   indexed), then publish the draft release (`gh release edit v0.3.0
+   --draft=false`).
+2. `gh repo create Vincentj88-python/homebrew-airail --public`, copy
+   `dist/homebrew-airail/Casks/airail.rb` in, push; then
+   `brew install --cask vincentj88-python/airail/airail` works.
+3. GitHub Sponsors on the profile with a **$99 goal: "notarized builds"**
+   (FUNDING.yml is committed). South Africa is supported; 0 % fee.
+4. Announce on X and the Claude Code / Codex / Cursor communities; hold the
+   Show HN and Product Hunt for the notarized release.
+
+**Then, needing the Apple Developer ID ($99/yr):** `xcrun notarytool
+store-credentials AIrail`, `AIRAIL_SIGN_IDENTITY="Developer ID Application:
+…" AIRAIL_NOTARY_PROFILE=AIrail ./scripts/release.sh` (notarizes and staples
+both the app and the DMG), Sparkle, the $12 soft licence via Dodo in the
+following release, then the Show HN. The rest of block C (glint,
+announcements, morph, style tokens, first-run, Dock etiquette, pinned rail),
+block D, the sandbox (decision 1: later) and tier 2 follow.
 
 Things established that reverse or extend earlier notes:
 
