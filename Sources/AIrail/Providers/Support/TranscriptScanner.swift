@@ -204,6 +204,9 @@ actor TranscriptScanner {
             if let project = event.project, event.tokens.total > 0 {
                 contribution.projects[project] = event.tokens.total
             }
+            if event.tokens.total > 0 {
+                contribution.splits[UsageKey(model: event.model, project: event.project)] = event.tokens
+            }
             if let session = event.session, event.countsAsMessage {
                 contribution.sessions.insert(session)
             }

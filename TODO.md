@@ -71,6 +71,26 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Cost by model and project (2026-09-07)
+
+Block B. The value line priced the whole week's token mix at each model's
+share; now the mix is kept per model *and* project: `UsageKey { model,
+project }` and `UsageAggregate.splits` (merged with `+` across buckets),
+filled where the collapse happens — `TranscriptScanner.ingest` (Claude,
+Codex), `CursorUsage.detail`, both keyed cost-report parsers, and the demo
+detail. `ModelPricing.estimate` sums each model's own split at its rate when
+splits exist (the weighted blend stays as the fallback), and `estimateByModel`
+/ `estimateByProject` price the columns. `UsageAggregate.costs` keeps Cursor's
+real cents per model, so `UsageDetail.byModel` shows Cursor's figure plain
+(`costIsEstimate == false`) and every other row "≈ $18" — `UsageBreakdown`
+appends a `.caption2` tertiary figure beside the tokens, hidden under a
+dollar, with a `.help` naming it an estimate at public API prices or the
+provider's own accounting. `TokenSplit` gained `*`. Claude's per-model weekly
+buckets (`seven_day_<model>`, `{utilization, resets_at}`) become meters
+("Sonnet this week") when populated; a null one — Opus on this Max account —
+is nothing, never 0 %. The keyed-platform rows inherit the still-unverified
+parsers (one line each, fixture-covered). 86 green (+2, plus scanner assertions).
+
 ## Screen Time header (2026-09-07)
 
 Block B. The chart's "USAGE" caption is now Screen Time's header: "LAST 24

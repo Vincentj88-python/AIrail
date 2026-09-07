@@ -237,6 +237,7 @@ enum AnthropicAPIUsage {
                 )
                 if let model = result.string("model"), aggregate.tokens.total > 0 {
                     aggregate.models[model] = aggregate.tokens.total
+                    aggregate.splits[UsageKey(model: model)] = aggregate.tokens
                 }
                 days[day, default: UsageAggregate()].merge(aggregate)
                 week.merge(aggregate)
@@ -337,6 +338,7 @@ enum OpenAIAPIUsage {
                 aggregate.messages = Int(result.double("num_model_requests") ?? 0)
                 if let model = result.string("model"), aggregate.tokens.total > 0 {
                     aggregate.models[model] = aggregate.tokens.total
+                    aggregate.splits[UsageKey(model: model)] = aggregate.tokens
                 }
                 days[day, default: UsageAggregate()].merge(aggregate)
                 week.merge(aggregate)

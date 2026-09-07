@@ -243,6 +243,10 @@ enum CursorUsage {
             usage.cost = event.cents / 100
             if event.tokens.total > 0 {
                 usage.models[event.model] = event.tokens.total
+                usage.splits[UsageKey(model: event.model)] = event.tokens
+            }
+            if event.cents > 0 {
+                usage.costs[event.model] = event.cents / 100 // Cursor's own accounting, not an estimate
             }
             if let conversation = event.conversation {
                 usage.sessions.insert(conversation)

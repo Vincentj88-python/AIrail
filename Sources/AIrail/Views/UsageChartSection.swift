@@ -402,6 +402,14 @@ struct UsageBreakdown: View {
                             .font(.caption)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
+                        // Quiet money beside the tokens: the provider's own
+                        // figure plain, an estimate with "≈"; nothing under a dollar.
+                        if let cost = share.cost, cost >= 1 {
+                            Text((share.costIsEstimate ? "≈ " : "") + UsageFormatting.dollars(cost))
+                                .font(.caption2)
+                                .monospacedDigit()
+                                .foregroundStyle(.tertiary)
+                        }
                     }
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
@@ -412,13 +420,33 @@ struct UsageBreakdown: View {
                     }
                     .frame(height: 4)
                 }
-                .help("\(name(share)): \(Int(share.tokens).formatted()) tokens")
+                .help(help(for: share, name: name(share)))
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(name(share))
-                .accessibilityValue("\(UsageFormatting.compactTokens(share.tokens)) tokens")
+                .accessibilityValue(accessibilityValue(for: share))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+extension UsageBreakdown {
+    fileprivate func help(for share: UsageShare, name: String) -> String {
+        var text = "\(name): \(Int(share.tokens).formatted()) tokens"
+        if let cost = share.cost, cost >= 1 {
+            text += share.costIsEstimate
+                ? " · ≈ \(UsageFormatting.dollars(cost)) at public API prices (an estimate, not a bill)"
+                : " · \(UsageFormatting.dollars(cost)) by the provider's own accounting"
+        }
+        return text
+    }
+
+    fileprivate func accessibilityValue(for share: UsageShare) -> String {
+        var text = "\(UsageFormatting.compactTokens(share.tokens)) tokens"
+        if let cost = share.cost, cost >= 1 {
+            text += share.costIsEstimate ? ", about \(UsageFormatting.dollars(cost)) estimated" : ", \(UsageFormatting.dollars(cost))"
+        }
+        return text
     }
 }
 

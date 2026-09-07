@@ -108,6 +108,8 @@ enum ClaudeUsage {
         var weeklyResetsAt: Date?
         var extraSpend: Double?
         var extraCap: Double?
+        /// Any populated `seven_day_<model>` bucket, as a meter ("Sonnet this week").
+        var modelMeters: [UsageMeter] = []
     }
 
     /// The Keychain items Claude Code may keep its sign-in under. The plain
@@ -155,6 +157,17 @@ enum ClaudeUsage {
         if let weekly = json["seven_day"] {
             report.weeklyPercent = weekly.double("utilization")
             report.weeklyResetsAt = DateParsing.iso8601(weekly.string("resets_at"))
+        }
+        // Per-model weekly buckets come and go by plan (`seven_day_opus` is
+        // null on a Max account today, `seven_day_sonnet` populated on others);
+        // whichever is populated becomes a meter, a null one is nothing.
+        for key in json.raw.keys.sorted() where key.hasPrefix("seven_day_") {
+            guard let bucket = json[key], let utilization = bucket.double("utilization") else { continue }
+            let model = String(key.dropFirst("seven_day_".count))
+            report.modelMeters.append(UsageMeter(
+                name: "\(UsageFormatting.modelDisplayName(model)) this week",
+                percent: UsageSnapshot.clampPercent(utilization)
+            ))
         }
         // Pay-as-you-go top-up on top of the plan; amounts are in minor units.
         if let extra = json["extra_usage"], extra.bool("is_enabled") == true {
@@ -218,6 +231,7 @@ enum ClaudeUsage {
                 newestLocalEvent: transcripts.newestEventDate, previousWeek: transcripts.previousWeek
             )
         }
+        detail.meters = report.modelMeters
         return UsageSnapshot(
             providerId: providerId,
             displayName: displayName,

@@ -865,6 +865,7 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(first.days[5].usage.tokens.total, 5)
         XCTAssertEqual(first.hours.last?.usage.tokens.total, 10)
         XCTAssertEqual(first.week.tokens.total, 15, "the week is still seven days")
+        XCTAssertEqual(first.week.splits.values.reduce(0) { $0 + $1.total }, 15, "the mix is kept per model and project for pricing")
         XCTAssertEqual(first.previousWeek.tokens.total, 8, "the week before is summed separately")
         XCTAssertEqual(first.newestEventDate.map { $0.timeIntervalSince1970.rounded() }, now.timeIntervalSince1970.rounded(), "the newest counted line is when this Mac last did something")
 
@@ -1121,6 +1122,70 @@ final class AIrailTests: XCTestCase {
         week.models = [:]
         XCTAssertEqual(ModelPricing.estimate(week), TokenPrices.unlisted.cost(of: week.tokens), "no model breakdown → the unlisted rate")
         XCTAssertNil(ModelPricing.estimate(UsageAggregate()), "no tokens → no estimate")
+    }
+
+    /// With the mix kept per model and project, each model is priced on its
+    /// own split, projects sum the models used in them, and a provider's own
+    /// per-model money is shown as its figure rather than an estimate.
+    func testCostByModelAndProjectUsesEachModelsOwnMix() throws {
+        var week = UsageAggregate()
+        let opusInApp = TokenSplit(input: 1_000_000, output: 100_000)        // opus 5/25 → $7.50
+        let haikuInApp = TokenSplit(input: 2_000_000, output: 200_000)       // haiku 1/5 → $3.00
+        let opusInDotfiles = TokenSplit(cacheRead: 10_000_000)               // opus 0.5 → $5.00
+        week.splits = [
+            UsageKey(model: "claude-opus-4-8", project: "app"): opusInApp,
+            UsageKey(model: "claude-haiku-4-5", project: "app"): haikuInApp,
+            UsageKey(model: "claude-opus-4-8", project: "dotfiles"): opusInDotfiles,
+        ]
+        week.tokens = opusInApp + haikuInApp + opusInDotfiles
+        week.models = ["claude-opus-4-8": opusInApp.total + opusInDotfiles.total, "claude-haiku-4-5": haikuInApp.total]
+        week.projects = ["app": opusInApp.total + haikuInApp.total, "dotfiles": opusInDotfiles.total]
+
+        XCTAssertEqual(try XCTUnwrap(ModelPricing.estimate(week)), 15.5, accuracy: 0.001, "the sum of each model's own split, not the blended mix")
+        let byModel = ModelPricing.estimateByModel(week)
+        XCTAssertEqual(byModel["claude-opus-4-8"] ?? 0, 12.5, accuracy: 0.001)
+        XCTAssertEqual(byModel["claude-haiku-4-5"] ?? 0, 3, accuracy: 0.001)
+        let byProject = ModelPricing.estimateByProject(week)
+        XCTAssertEqual(byProject["app"] ?? 0, 10.5, accuracy: 0.001)
+        XCTAssertEqual(byProject["dotfiles"] ?? 0, 5, accuracy: 0.001)
+
+        var detail = UsageDetail(week: week)
+        XCTAssertEqual(detail.byModel.first?.name, "claude-opus-4-8")
+        XCTAssertEqual(detail.byModel.first?.cost ?? 0, 12.5, accuracy: 0.001)
+        XCTAssertTrue(detail.byModel.first?.costIsEstimate == true)
+        XCTAssertEqual(detail.byProject.map(\.name), ["dotfiles", "app"], "by tokens, and the cache-heavy project has more of them")
+        XCTAssertEqual(detail.byProject.first?.cost ?? 0, 5, accuracy: 0.001)
+        XCTAssertEqual(detail.byProject.last?.cost ?? 0, 10.5, accuracy: 0.001)
+
+        // Cursor keeps real cents per model: shown as its figure, not an estimate.
+        detail.week.costs["claude-opus-4-8"] = 9.99
+        let cursorRow = try XCTUnwrap(detail.byModel.first { $0.name == "claude-opus-4-8" })
+        XCTAssertEqual(cursorRow.cost, 9.99)
+        XCTAssertFalse(cursorRow.costIsEstimate)
+
+        var merged = UsageAggregate()
+        merged.merge(week)
+        merged.merge(week)
+        XCTAssertEqual(merged.splits[UsageKey(model: "claude-opus-4-8", project: "app")]?.total, opusInApp.total * 2, "splits add up across buckets")
+    }
+
+    /// A populated per-model weekly bucket becomes a meter under the ring; a
+    /// null one (Opus on a Max account today) is nothing, never 0%.
+    func testClaudePerModelWeeklyBucketBecomesAMeter() throws {
+        let json = #"""
+        {"five_hour":{"utilization":2.0,"resets_at":"2026-09-02T09:30:00.479395+00:00"},
+         "seven_day":{"utilization":31.5,"resets_at":"2026-09-08T02:00:00.479420+00:00"},
+         "seven_day_opus":null,
+         "seven_day_sonnet":{"utilization":12.5,"resets_at":"2026-09-08T02:00:00.479420+00:00"}}
+        """#
+        let report = try ClaudeUsage.parse(Data(json.utf8))
+        XCTAssertEqual(report.modelMeters.map(\.name), ["Sonnet this week"])
+        XCTAssertEqual(report.modelMeters.first?.percent, 12.5)
+        let snapshot = ClaudeUsage.snapshot(
+            report: report, credential: ClaudeUsage.Credential(accessToken: "t", expiresAt: nil, plan: "Max"),
+            transcripts: nil, providerId: "claude", displayName: "Claude"
+        )
+        XCTAssertEqual(snapshot.detail.meters.map(\.name), ["Sonnet this week"])
     }
 
     func testModelPricingPicksTheMostSpecificRow() {

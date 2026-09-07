@@ -124,10 +124,15 @@ final class MockUsageEngine {
             let tokens = requests * tokensPerRequest
             usage.tokens = TokenSplit(input: tokens * 0.08, output: tokens * 0.05, cacheWrite: tokens * 0.12, cacheRead: tokens * 0.75)
             usage.thinking = usage.tokens.output * 0.4
+            let projectShares = ["demo-app": 0.55, "side-project": 0.3, "dotfiles": 0.15]
             for (rank, model) in profile.demoModels.enumerated() {
-                usage.models[model] = tokens * [0.62, 0.28, 0.10][min(rank, 2)]
+                let modelShare = [0.62, 0.28, 0.10][min(rank, 2)]
+                usage.models[model] = tokens * modelShare
+                for (project, projectShare) in projectShares {
+                    usage.splits[UsageKey(model: model, project: project)] = usage.tokens * (modelShare * projectShare)
+                }
             }
-            usage.projects = ["demo-app": tokens * 0.55, "side-project": tokens * 0.3, "dotfiles": tokens * 0.15]
+            usage.projects = projectShares.mapValues { tokens * $0 }
             usage.toolCalls = ["Bash": Int(requests * 0.3), "Edit": Int(requests * 0.2), "Read": Int(requests * 0.15)]
             usage.sessions = Set((0..<max(1, Int(requests / 40))).map { "demo-\(index)-\($0)" })
             days[day] = usage
@@ -136,10 +141,7 @@ final class MockUsageEngine {
         // Last week, a touch quieter, so the header has something to compare.
         var previousWeek = UsageAggregate()
         previousWeek.messages = Int(Double(week.messages) * 0.89)
-        previousWeek.tokens = TokenSplit(
-            input: week.tokens.input * 0.89, output: week.tokens.output * 0.89,
-            cacheWrite: week.tokens.cacheWrite * 0.89, cacheRead: week.tokens.cacheRead * 0.89
-        )
+        previousWeek.tokens = week.tokens * 0.89
         return UsageDetail(
             hours: UsageBucketing.series(hours, count: 24, component: .hour, endingAt: now, calendar: calendar),
             days: UsageBucketing.series(days, count: 7, component: .day, endingAt: now, calendar: calendar),

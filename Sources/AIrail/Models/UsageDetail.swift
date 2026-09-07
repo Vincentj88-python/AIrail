@@ -22,6 +22,17 @@ struct TokenSplit: Sendable, Equatable {
     static func += (lhs: inout TokenSplit, rhs: TokenSplit) {
         lhs = lhs + rhs
     }
+
+    static func * (lhs: TokenSplit, rhs: Double) -> TokenSplit {
+        TokenSplit(input: lhs.input * rhs, output: lhs.output * rhs, cacheWrite: lhs.cacheWrite * rhs, cacheRead: lhs.cacheRead * rhs)
+    }
+}
+
+/// One model in one project — the grain at which token mixes are kept, so
+/// cost can be priced per model and summed per project.
+struct UsageKey: Hashable, Sendable {
+    var model: String? = nil
+    var project: String? = nil
 }
 
 /// Everything counted within one time bucket (an hour, a day, or a week).
@@ -37,6 +48,11 @@ struct UsageAggregate: Sendable, Equatable {
     var sessions: Set<String> = []
     /// Money the provider itself attributes to this usage, when it says.
     var cost: Double = 0
+    /// The token mix per model and project, for pricing; `models` and
+    /// `projects` are the totals of these.
+    var splits: [UsageKey: TokenSplit] = [:]
+    /// Money the provider itself attributes per model (Cursor's cents), USD.
+    var costs: [String: Double] = [:]
 
     var isEmpty: Bool { messages == 0 && toolCalls.isEmpty && tokens.total == 0 }
 
@@ -49,6 +65,8 @@ struct UsageAggregate: Sendable, Equatable {
         projects.merge(other.projects, uniquingKeysWith: +)
         sessions.formUnion(other.sessions)
         cost += other.cost
+        splits.merge(other.splits, uniquingKeysWith: +)
+        costs.merge(other.costs, uniquingKeysWith: +)
     }
 
     /// Share of output that was thinking, 0...1; nil without any output.
@@ -68,7 +86,9 @@ struct UsageShare: Sendable, Identifiable, Equatable {
     var id: String { name }
     let name: String
     let tokens: Double
+    /// USD: the provider's own figure, or an estimate at public API prices.
     var cost: Double? = nil
+    var costIsEstimate = true
 }
 
 /// One of a provider's meters when it has several (Copilot's premium / chat /
@@ -106,17 +126,28 @@ struct UsageDetail: Sendable, Equatable {
         UsageFormatting.percentDelta(current: week.tokens.total, previous: previousWeek?.tokens.total)
     }
 
+    /// Each model with its tokens and cost: the provider's own figure when it
+    /// keeps one (Cursor), else an estimate priced from that model's own mix.
     var byModel: [UsageShare] {
-        week.models
+        let estimates = ModelPricing.estimateByModel(week)
+        return week.models
             .filter { $0.value > 0 }
-            .map { UsageShare(name: $0.key, tokens: $0.value) }
+            .map { model, tokens in
+                if let real = week.costs[model] {
+                    return UsageShare(name: model, tokens: tokens, cost: real, costIsEstimate: false)
+                }
+                return UsageShare(name: model, tokens: tokens, cost: estimates[model])
+            }
             .sorted { $0.tokens > $1.tokens }
     }
 
+    /// Each project with its tokens and an estimated cost summed from the
+    /// models used in it.
     var byProject: [UsageShare] {
-        week.projects
+        let estimates = ModelPricing.estimateByProject(week)
+        return week.projects
             .filter { $0.value > 0 }
-            .map { UsageShare(name: $0.key, tokens: $0.value) }
+            .map { UsageShare(name: $0.key, tokens: $0.value, cost: estimates[$0.key]) }
             .sorted { $0.tokens > $1.tokens }
     }
 

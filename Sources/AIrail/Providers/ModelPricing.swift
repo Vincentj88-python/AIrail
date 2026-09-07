@@ -84,19 +84,54 @@ enum ModelPricing {
         return best?.prices ?? .unlisted
     }
 
-    /// API-equivalent USD for a week's tokens: the week's input/output/cache
-    /// mix priced per model, each model weighted by its share of the week's
-    /// tokens (the mix itself is only known for the week as a whole). Nil for
-    /// a week without tokens.
+    /// API-equivalent USD for a week's tokens. With the per-model mix kept
+    /// (`splits`) each model's own input/output/cache split is priced at its
+    /// rate; without it, the week's whole mix is priced per model weighted by
+    /// share of tokens. Nil for a week without tokens.
     static func estimate(_ week: UsageAggregate) -> Double? {
         let tokens = week.tokens
         guard tokens.total > 0 else { return nil }
+        if !week.splits.isEmpty {
+            return week.splits.reduce(0) { dollars, split in
+                dollars + prices(for: split.key.model ?? "").cost(of: split.value)
+            }
+        }
         let shares = week.models.filter { $0.value > 0 }
         let counted = shares.values.reduce(0, +)
         guard counted > 0 else { return TokenPrices.unlisted.cost(of: tokens) }
         return shares.reduce(0) { dollars, share in
             dollars + prices(for: share.key).cost(of: tokens) * share.value / counted
         }
+    }
+
+    /// The estimate per model, from each model's own mix when kept, else
+    /// its share of the week's mix. Models without a name are left out.
+    static func estimateByModel(_ week: UsageAggregate) -> [String: Double] {
+        var dollars: [String: Double] = [:]
+        if !week.splits.isEmpty {
+            for (key, split) in week.splits {
+                guard let model = key.model else { continue }
+                dollars[model, default: 0] += prices(for: model).cost(of: split)
+            }
+            return dollars
+        }
+        let counted = week.models.values.reduce(0, +)
+        guard counted > 0 else { return [:] }
+        for (model, share) in week.models where share > 0 {
+            dollars[model] = prices(for: model).cost(of: week.tokens) * share / counted
+        }
+        return dollars
+    }
+
+    /// The estimate per project, summed from the models used in it — only
+    /// possible where the mix was kept per project (transcripts).
+    static func estimateByProject(_ week: UsageAggregate) -> [String: Double] {
+        var dollars: [String: Double] = [:]
+        for (key, split) in week.splits {
+            guard let project = key.project else { continue }
+            dollars[project, default: 0] += prices(for: key.model ?? "").cost(of: split)
+        }
+        return dollars
     }
 
     /// Model ids from vendors ("anthropic/claude-opus-4.8:batch") and from
