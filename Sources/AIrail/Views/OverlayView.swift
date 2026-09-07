@@ -40,9 +40,13 @@ struct OverlayView: View {
                 }
                 ActivityLine(week: detail.week, tools: detail.topTools)
                 // Only a live account with nothing priced in dollars already:
-                // a demo profile has nothing to value, and a reported spend
-                // or Cursor's per-request cents beat an estimate of the same.
-                if let snapshot, snapshot.status != .demo, snapshot.spend == nil, detail.week.cost == 0,
+                // a demo profile has nothing to value, and a keyed platform's
+                // reported spend or Cursor's per-request cents beat an estimate
+                // of the same. A subscription tool keeps the line even with a
+                // spend figure — Claude's extra usage is an overage on top of
+                // the plan, not a price on the plan's own tokens.
+                if let snapshot, snapshot.status != .demo, detail.week.cost == 0,
+                   snapshot.spend == nil || info.kind == .tool,
                    let value = ModelPricing.estimate(detail.week) {
                     valueLine(value, plan: snapshot.plan)
                 }

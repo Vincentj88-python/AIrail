@@ -24,7 +24,7 @@ final class CodexProvider: UsageProviding {
     )
 
     private static let home = NSHomeDirectory() + "/.codex"
-    private static let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
+    static let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
 
     private let scanner = TranscriptScanner(
         roots: [URL(fileURLWithPath: home + "/sessions")],

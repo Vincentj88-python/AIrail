@@ -23,7 +23,7 @@ final class ClaudeProvider: UsageProviding {
     )
 
     private static let keychainService = "Claude Code-credentials"
-    private static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+    static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
     private var credential: ClaudeUsage.Credential?
     private let scanner = TranscriptScanner(

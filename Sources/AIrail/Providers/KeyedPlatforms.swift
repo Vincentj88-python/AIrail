@@ -22,8 +22,8 @@ extension KeyedPlatform {
         ),
         fetch: { key, providerId, displayName in
             let headers = ["Authorization": "Bearer \(key)", "Accept": "application/json"]
-            let keyData = try await HTTPClient.authorizedGet(URL(string: "https://openrouter.ai/api/v1/auth/key")!, headers: headers, tool: displayName)
-            let creditsData = try? await HTTPClient.authorizedGet(URL(string: "https://openrouter.ai/api/v1/credits")!, headers: headers, tool: displayName)
+            let keyData = try await HTTPClient.authorizedGet(OpenRouterUsage.keyURL, headers: headers, tool: displayName)
+            let creditsData = try? await HTTPClient.authorizedGet(OpenRouterUsage.creditsURL, headers: headers, tool: displayName)
             return try OpenRouterUsage.snapshot(keyData: keyData, creditsData: creditsData, providerId: providerId, displayName: displayName)
         }
     )
@@ -43,7 +43,7 @@ extension KeyedPlatform {
         ),
         fetch: { key, providerId, displayName in
             let headers = ["Authorization": "Bearer \(key)", "Accept": "application/json"]
-            let data = try await HTTPClient.authorizedGet(URL(string: "https://api.deepseek.com/user/balance")!, headers: headers, tool: displayName)
+            let data = try await HTTPClient.authorizedGet(DeepSeekUsage.balanceURL, headers: headers, tool: displayName)
             return try DeepSeekUsage.snapshot(data: data, providerId: providerId, displayName: displayName)
         }
     )
@@ -102,6 +102,9 @@ extension KeyedPlatform {
 // MARK: - OpenRouter
 
 enum OpenRouterUsage {
+    static let keyURL = URL(string: "https://openrouter.ai/api/v1/auth/key")!
+    static let creditsURL = URL(string: "https://openrouter.ai/api/v1/credits")!
+
     /// `/auth/key`: `{"data": {"label", "usage", "usage_monthly", "limit", "limit_remaining",
     /// "limit_reset", "is_free_tier"}}` — `usage` is all time, `usage_monthly` the current UTC
     /// month, `limit_reset` "daily"/"weekly"/"monthly" or null for a limit that never resets;
@@ -164,6 +167,8 @@ enum OpenRouterUsage {
 // MARK: - DeepSeek
 
 enum DeepSeekUsage {
+    static let balanceURL = URL(string: "https://api.deepseek.com/user/balance")!
+
     /// `{"is_available": true, "balance_infos": [{"currency": "USD", "total_balance": "110.00", …}]}`.
     static func snapshot(data: Data, providerId: String, displayName: String, now: Date = Date()) throws -> UsageSnapshot {
         let json = try JSONObject(data: data)

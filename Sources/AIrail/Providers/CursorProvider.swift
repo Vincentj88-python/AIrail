@@ -24,8 +24,8 @@ final class CursorProvider: UsageProviding {
 
     private static let databasePath = NSHomeDirectory()
         + "/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
-    private static let usageURL = URL(string: "https://cursor.com/api/usage-summary")!
-    private static let eventsURL = URL(string: "https://cursor.com/api/dashboard/get-filtered-usage-events")!
+    static let usageURL = URL(string: "https://cursor.com/api/usage-summary")!
+    static let eventsURL = URL(string: "https://cursor.com/api/dashboard/get-filtered-usage-events")!
     private static let historyDays = 7
 
     private var credential: CursorUsage.Credential?

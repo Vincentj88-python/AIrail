@@ -793,6 +793,15 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(ModelPricing.prices(for: "gpt-5-mini").input, 0.25)
         XCTAssertEqual(ModelPricing.prices(for: "gpt-5.2-codex").input, 1.75)
         XCTAssertEqual(ModelPricing.prices(for: "gpt-5.5-mini").input, 1.25, "an unknown 5.x reads as the gpt-5 row")
+        // Aliases and cheap variants: each new row must beat its family row.
+        XCTAssertEqual(ModelPricing.prices(for: "claude-opus-4.0").input, 15, "opus-4.0 is Opus 4, not today's Opus")
+        XCTAssertEqual(ModelPricing.prices(for: "claude-4-opus-20250514").input, 15, "version-first Opus 4 spelling")
+        XCTAssertEqual(ModelPricing.prices(for: "claude-4.1-opus").input, 15, "version-first Opus 4.1 spelling")
+        XCTAssertEqual(ModelPricing.prices(for: "gpt-4.1-mini").input, 0.4, "gpt-4.1-mini must not price as gpt-4.1")
+        XCTAssertEqual(ModelPricing.prices(for: "gpt-4o-mini-2024-07-18").input, 0.15, "gpt-4o-mini must not price as gpt-4o")
+        XCTAssertEqual(ModelPricing.prices(for: "o3-mini").input, 1.1, "o3-mini must not price as o3")
+        XCTAssertEqual(ModelPricing.prices(for: "o3-pro").input, 20, "o3-pro must not price as o3")
+        XCTAssertEqual(ModelPricing.prices(for: "o3-2025-04-16").input, 2, "a dated o3 is still the o3 row")
         // Keys fit anywhere at a boundary (Cursor's ids), never inside a word.
         XCTAssertEqual(ModelPricing.prices(for: "cursor-grok-4.6-high-fast").input, 3)
         XCTAssertEqual(ModelPricing.prices(for: "gemini-3-pro").input, 2, "a bare family id is the family row, not a longer sibling")
@@ -901,7 +910,7 @@ final class AIrailTests: XCTestCase {
     // MARK: Network path
 
     func testNetworkSessionKeepsNothingOnDisk() {
-        let configuration = HTTPClient.session.configuration
+        let configuration = HTTPClient.configuration
         XCTAssertNil(configuration.urlCache, "no URL cache: a usage body never lands in ~/Library/Caches")
         XCTAssertNil(configuration.httpCookieStorage, "no cookie jar: an edge-gateway cookie never lands in HTTPStorages")
         XCTAssertFalse(configuration.httpShouldSetCookies)
@@ -913,39 +922,46 @@ final class AIrailTests: XCTestCase {
 
     @MainActor
     func testEveryEndpointIsOnTheAllowlist() throws {
-        // One URL per endpoint the providers actually hit, plus the release check.
-        var endpoints = try [
-            "https://api.anthropic.com/api/oauth/usage",
-            "https://chatgpt.com/backend-api/wham/usage",
-            "https://api.github.com/copilot_internal/user",
-            "https://cursor.com/api/usage-summary",
-            "https://cursor.com/api/dashboard/get-filtered-usage-events",
-            "https://openrouter.ai/api/v1/auth/key",
-            "https://openrouter.ai/api/v1/credits",
-            "https://api.deepseek.com/user/balance",
-        ].map { try XCTUnwrap(URL(string: $0)) }
-        endpoints += [AnthropicAPIUsage.usageURL(now: .now), OpenAIAPIUsage.usageURL(now: .now), UpdateChecker.latestReleaseURL]
+        // The providers' own URL constants, not re-typed copies, so a changed
+        // endpoint is caught here: every one the providers hit, plus the release check.
+        let endpoints = [
+            ClaudeProvider.usageURL,
+            CodexProvider.usageURL,
+            CopilotProvider.quotaURL,
+            CursorProvider.usageURL, CursorProvider.eventsURL,
+            OpenRouterUsage.keyURL, OpenRouterUsage.creditsURL,
+            DeepSeekUsage.balanceURL,
+            AnthropicAPIUsage.usageURL(now: .now), AnthropicAPIUsage.costURL(now: .now),
+            OpenAIAPIUsage.usageURL(now: .now), OpenAIAPIUsage.costURL(now: .now),
+            UpdateChecker.latestReleaseURL,
+        ]
         for url in endpoints {
             XCTAssertTrue(HTTPClient.isAllowed(url), url.absoluteString)
             XCTAssertNoThrow(try HTTPClient.check(url), url.absoluteString)
         }
         XCTAssertEqual(HTTPClient.allowedHosts.count, 7, "README says seven hosts; keep the two in step")
+        XCTAssertEqual(Set(endpoints.compactMap { $0.host() }), HTTPClient.allowedHosts, "no host on the list without an endpoint that uses it")
     }
 
     func testOffListHostsAreRefusedBeforeAnyRequest() async throws {
+        XCTAssertTrue(HTTPClient.hasRedirectGuard, "a redirect off the list must be refused by the session's delegate")
+        // What the error names: the host when the host is the problem, the
+        // scheme (and port) with it when the host is allowed but reached wrongly.
         let blocked = [
-            "https://example.com/usage",                 // not on the list
-            "http://api.anthropic.com/api/oauth/usage",  // not https
-            "https://api.anthropic.com:8443/usage",      // not the default port
-            "https://evil.api.anthropic.com/usage",      // a subdomain is another host
+            ("https://example.com/usage", "example.com"),                                    // not on the list
+            ("http://api.anthropic.com/api/oauth/usage", "http://api.anthropic.com"),       // not https
+            ("https://api.anthropic.com:8443/usage", "https://api.anthropic.com:8443"),     // not the default port
+            ("https://evil.api.anthropic.com/usage", "evil.api.anthropic.com"),             // a subdomain is another host
         ]
-        for text in blocked {
+        for (text, named) in blocked {
             let url = try XCTUnwrap(URL(string: text))
             XCTAssertFalse(HTTPClient.isAllowed(url), text)
+            XCTAssertEqual(HTTPClient.blockedName(url), named, text)
             XCTAssertThrowsError(try HTTPClient.check(url), text) { error in
-                guard let failure = error as? ConnectionError, case .blockedHost = failure else {
+                guard let failure = error as? ConnectionError, case .blockedHost(let host) = failure else {
                     return XCTFail("\(text): \(error)")
                 }
+                XCTAssertEqual(host, named, "\(text) must never blame a bare allowed host")
             }
         }
         XCTAssertFalse(HTTPClient.isAllowed(nil))
@@ -962,27 +978,43 @@ final class AIrailTests: XCTestCase {
         }
     }
 
-    func testLegacyStoreScrubLeavesTheAltSvcDatabase() throws {
+    func testLegacyStoreScrubRemovesOnlyTheV020Artefacts() throws {
         let manager = FileManager.default
         let library = manager.temporaryDirectory.appending(path: "airail-scrub-\(UUID().uuidString)")
         defer { try? manager.removeItem(at: library) }
         let id = "com.example.airail-test"
-        let cache = library.appending(path: "Caches/\(id)/Cache.db")
-        let cookies = library.appending(path: "HTTPStorages/\(id).binarycookies")
-        let altSvc = library.appending(path: "HTTPStorages/\(id)/httpstorages.sqlite")
-        for file in [cache, cookies, altSvc] {
+        let cacheDirectory = library.appending(path: "Caches/\(id)")
+        let legacy = [
+            cacheDirectory.appending(path: "Cache.db"),
+            cacheDirectory.appending(path: "Cache.db-shm"),
+            cacheDirectory.appending(path: "Cache.db-wal"),
+            cacheDirectory.appending(path: "fsCachedData/0A1B2C3D"),
+            library.appending(path: "HTTPStorages/\(id).binarycookies"),
+        ]
+        let kept = [
+            cacheDirectory.appending(path: "something-else.plist"),
+            library.appending(path: "HTTPStorages/\(id)/httpstorages.sqlite"),
+        ]
+        for file in legacy + kept {
             try manager.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data("x".utf8).write(to: file)
         }
 
         HTTPClient.removeLegacyStores(bundleId: id, library: library)
 
-        XCTAssertFalse(manager.fileExists(atPath: cache.deletingLastPathComponent().path), "the whole cache directory goes")
-        XCTAssertFalse(manager.fileExists(atPath: cookies.path))
-        XCTAssertTrue(manager.fileExists(atPath: altSvc.path), "Alt-Svc hints hold no personal data and stay")
+        for file in legacy {
+            XCTAssertFalse(manager.fileExists(atPath: file.path), file.lastPathComponent)
+        }
+        XCTAssertFalse(manager.fileExists(atPath: cacheDirectory.appending(path: "fsCachedData").path), "the body-file directory goes")
+        XCTAssertTrue(manager.fileExists(atPath: cacheDirectory.path), "only the artefacts go, not the directory")
+        for file in kept {
+            XCTAssertTrue(manager.fileExists(atPath: file.path), "\(file.lastPathComponent) is not v0.2.0's and stays")
+        }
         HTTPClient.removeLegacyStores(bundleId: id, library: library) // a no-op once gone
         HTTPClient.removeLegacyStores(bundleId: nil, library: library)
-        XCTAssertTrue(manager.fileExists(atPath: altSvc.path))
+        for file in kept {
+            XCTAssertTrue(manager.fileExists(atPath: file.path))
+        }
     }
 
     // MARK: Helpers

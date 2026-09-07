@@ -21,7 +21,7 @@ final class CopilotProvider: UsageProviding {
         demoModels: ["gpt-5.5", "claude-sonnet-5"]
     )
 
-    private static let quotaURL = URL(string: "https://api.github.com/copilot_internal/user")!
+    static let quotaURL = URL(string: "https://api.github.com/copilot_internal/user")!
     private static let extensionAppsPath = NSHomeDirectory() + "/.config/github-copilot/apps.json"
 
     private var token: String?

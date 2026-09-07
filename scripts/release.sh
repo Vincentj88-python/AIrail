@@ -29,12 +29,12 @@ SCHEME="AIrail"
 SIGN_IDENTITY="${AIRAIL_SIGN_IDENTITY:-AIrail Dev}"
 APP_NAME="AIrail"
 VERSION="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo 0.0.0)"
-COMMIT="$(git describe --always --dirty --exclude='*')"
+COMMIT="$(git describe --always --dirty --exclude='*' 2>/dev/null || true)"
 BUILD_DIR="$(mktemp -d)"
 OUT_DIR="$PWD/dist"
 DMG="$OUT_DIR/${APP_NAME}-${VERSION}.dmg"
 
-echo "▸ Building $APP_NAME $VERSION ($COMMIT)"
+echo "▸ Building $APP_NAME $VERSION${COMMIT:+ ($COMMIT)}"
 xcodebuild \
   -scheme "$SCHEME" \
   -configuration Release \
@@ -49,7 +49,10 @@ APP="$BUILD_DIR/Build/Products/Release/$APP_NAME.app"
 
 # GENERATE_INFOPLIST_FILE ignores custom INFOPLIST_KEY_* settings, so the
 # commit goes in here, before signing; Settings › General reads it back.
-/usr/libexec/PlistBuddy -c "Add :AIrailCommit string $COMMIT" "$APP/Contents/Info.plist"
+# Outside a git checkout there is no commit to stamp, and the key is left out.
+if [ -n "$COMMIT" ]; then
+  /usr/libexec/PlistBuddy -c "Add :AIrailCommit string $COMMIT" "$APP/Contents/Info.plist"
+fi
 
 echo "▸ Signing with $SIGN_IDENTITY (hardened runtime, timestamped, no entitlements)"
 codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP"

@@ -34,21 +34,30 @@ enum ModelPricing {
     /// Checked 2026-09-06.
     static let table: [(key: String, prices: TokenPrices)] = [
         // Anthropic — family words, since ids read both "claude-opus-4-8" and
-        // "claude-3-5-haiku-…". Opus 4 (dated id) and 4.1 were 3× today's Opus.
+        // "claude-3-5-haiku-…". Opus 4 (dated id, "opus-4.0" and the
+        // version-first "claude-4-opus" spellings) and 4.1 were 3× today's Opus.
         ("opus-4.20250514", TokenPrices(input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.5)),
+        ("opus-4.0", TokenPrices(input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.5)),
+        ("4-opus", TokenPrices(input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.5)),
         ("opus-4.1", TokenPrices(input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.5)),
+        ("4.1-opus", TokenPrices(input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.5)),
         ("opus", TokenPrices(input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5)),
         ("sonnet", TokenPrices(input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.3)),
         ("haiku", TokenPrices(input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.1)),
         ("fable", TokenPrices(input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5)),
         // OpenAI — "gpt-5" also covers 5.1, the codex variants and any 5.x
-        // without a row of its own.
+        // without a row of its own; the mini/pro variants need their own rows
+        // or they would price at the family rate.
         ("gpt-5.2", TokenPrices(input: 1.75, output: 14, cacheWrite: 1.75, cacheRead: 0.175)),
         ("gpt-5-mini", TokenPrices(input: 0.25, output: 2, cacheWrite: 0.25, cacheRead: 0.025)),
         ("gpt-5-nano", TokenPrices(input: 0.05, output: 0.4, cacheWrite: 0.05, cacheRead: 0.005)),
         ("gpt-5", TokenPrices(input: 1.25, output: 10, cacheWrite: 1.25, cacheRead: 0.125)),
+        ("gpt-4.1-mini", TokenPrices(input: 0.4, output: 1.6, cacheWrite: 0.4, cacheRead: 0.1)),
         ("gpt-4.1", TokenPrices(input: 2, output: 8, cacheWrite: 2, cacheRead: 0.5)),
+        ("gpt-4o-mini", TokenPrices(input: 0.15, output: 0.6, cacheWrite: 0.15, cacheRead: 0.075)),
         ("gpt-4o", TokenPrices(input: 2.5, output: 10, cacheWrite: 2.5, cacheRead: 1.25)),
+        ("o3-mini", TokenPrices(input: 1.1, output: 4.4, cacheWrite: 1.1, cacheRead: 0.55)),
+        ("o3-pro", TokenPrices(input: 20, output: 80, cacheWrite: 20, cacheRead: 5)),
         ("o3", TokenPrices(input: 2, output: 8, cacheWrite: 2, cacheRead: 0.5)),
         ("o4-mini", TokenPrices(input: 1.1, output: 4.4, cacheWrite: 1.1, cacheRead: 0.275)),
         ("gpt", TokenPrices(input: 1.25, output: 10, cacheWrite: 1.25, cacheRead: 0.125)),

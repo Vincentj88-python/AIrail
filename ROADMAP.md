@@ -34,7 +34,7 @@ Five ordered blocks; each lands before the next touches the same files. v0.2.1 =
 
 ### Block A — Foundations and removals (10 items, ≈ 6 days)
 
-- [x] **Hardened, attested builds** · 1 day · wow 2/5 · `signing-hygiene`
+- [x] **Hardened, attested builds** · 1 day · wow 2/5 · `signing-hygiene` (hardened runtime + workflow landed; 10-year cert by hand at v0.3.0, attestation at go-public — see TODO.md)
   Hardened runtime with no get-task-allow, a timestamped 10-year cert, and provenance attestations once the repo is public.
   - How: release.sh: build with CODE_SIGN_IDENTITY=-, PlistBuddy-add AIrailCommit, then one `codesign --force --options runtime --timestamp --sign "AIrail Dev"` with no --entitlements (get-task-allow gone) and three fail-the-build asserts (no get-task-allow, flags=0x10000(runtime), Timestamp). Recreate the cert with 10-year validity. Draft .github/workflows/release.yml on macos-15 with attest-build-provenance guarded on !repository.private; GeneralPane footer shows the commit only when the plist key exists.
   - Why here: Block A, first: the shipped 0.2.0 DMG is debuggable by any same-user process, a plain defect worth a v0.2.1 today. The cert re-creation costs one Keychain re-prompt; see open question 6 on whether to fold it into the Developer ID release instead. The attestation half waits for go-public.
@@ -124,7 +124,7 @@ Five ordered blocks; each lands before the next touches the same files. v0.2.1 =
 
 - [ ] **Used elsewhere** · 1 day · wow 3/5 · `critic-7-used-elsewhere`
   When the session ring climbs while nothing ran on this Mac, the card says so, so a second Mac or claude.ai stops looking like a bug.
-  - How: Add UsageDetail.newestLocalEvent (forwarded from transcripts.newestEventDate in ClaudeUsage/CodexUsage.snapshot). Pure UsageElsewhere in UsageInsights, evaluated on the .ok path beside recordSample and cleared on disconnect or a new resetsAt. Rule A: sessionPercent ≥ 3 and no local event since window start − 2 min → 'No Claude Code activity on this Mac this session'. Rule B: accumulate rises ≥ 3 pts across ≥ 2 reads with newestLocalEvent unchanged → 'Up 12 pts since 14:02…'. One .subheadline line with a .help stating exactly what is read.
+  - How: Block A deleted the scanner's newest-event field, so re-add it first: a max over `event.date` in TranscriptScanner.ingest, exposed as Summary.newestEventDate and forwarded as UsageDetail.newestLocalEvent in ClaudeUsage/CodexUsage.snapshot. Pure UsageElsewhere in UsageInsights, evaluated on the .ok path beside recordSample and cleared on disconnect or a new resetsAt. Rule A: sessionPercent ≥ 3 and no local event since window start − 2 min → 'No Claude Code activity on this Mac this session'. Rule B: accumulate rises ≥ 3 pts across ≥ 2 reads with newestLocalEvent unchanged → 'Up 12 pts since 14:02…'. One .subheadline line with a .help stating exactly what is read.
   - Why here: Block B, after pace-against-window supplies the window start. Phrase as an observation, never a device attribution; no island qualifier.
 
 - [ ] **Screen Time header** · 1 day · wow 3/5 · `week-over-week-header`
@@ -303,7 +303,7 @@ Prerequisites: the Developer ID, the usage ledger, the menu consolidation, the s
 
 - [ ] **Activity-aware adaptive refresh** · 1 day · wow 2/5 · `adaptive-refresh`
   Read every minute while a transcript is moving, drowse to 5–15 min when idle or in Low Power Mode, one read right after each reset.
-  - How: Replace the zero-tolerance Timer with a 30 s tick (tolerance 10 s) over per-provider nextDue computed by a pure RefreshCadence.interval(setting:lastActivity:lowPower:now:): 60 s while UsageSnapshot.lastActivityAt (from Summary.newestEventDate and Cursor events.last) is under 5 min old, 5 min idle, 15 min after an hour, doubled in Low Power Mode, always pulled forward to resetsAt + 10 s. The tier-1 ActivityMonitor's FSEvents stream marks a provider active and requests a read if the last one is over 45 s old. GeneralPane's Refresh picker gains 'Automatically' (stored 0, default when the key is absent). Cut per-account cadence, 'Next read' row, thermal and battery detection.
+  - How: Replace the zero-tolerance Timer with a 30 s tick (tolerance 10 s) over per-provider nextDue computed by a pure RefreshCadence.interval(setting:lastActivity:lowPower:now:): 60 s while UsageSnapshot.lastActivityAt (from Summary.newestEventDate — re-added by used-elsewhere as a max over `event.date` in TranscriptScanner.ingest and surfaced as UsageDetail.newestLocalEvent, since block A deleted the field — and Cursor events.last) is under 5 min old, 5 min idle, 15 min after an hour, doubled in Low Power Mode, always pulled forward to resetsAt + 10 s. The tier-1 ActivityMonitor's FSEvents stream marks a provider active and requests a read if the last one is over 45 s old. GeneralPane's Refresh picker gains 'Automatically' (stored 0, default when the key is absent). Cut per-account cadence, 'Next read' row, thermal and battery detection.
   - Why here: Prerequisites: the single-flight guard and the ActivityMonitor from agent-now-playing (one FSEvents wrapper, not two). Mail's 'Check for new messages: Automatically' is the precedent.
 
 - [ ] **Work and personal accounts** · 2–4 days · wow 3/5 · `work-personal-accounts`

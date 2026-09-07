@@ -261,6 +261,21 @@ Things established that reverse or extend earlier notes:
   `Caches/<bundle id>` and `HTTPStorages/<bundle id>.binarycookies` (the
   Alt-Svc `httpstorages.sqlite` stays: no personal data in it) — every
   launch, a no-op once gone, so there is no migration flag to keep.
+- **Polish (2026-09-07):** the session is `private` again; the tests read
+  `HTTPClient.configuration` (a copy) and `HTTPClient.hasRedirectGuard`, and
+  nothing outside `HTTPClient` can touch the session. `blockedHost` is
+  truthful when the host is allowed but the scheme or port is not: it names
+  "http://api.anthropic.com" or "https://api.anthropic.com:8443" rather than
+  the bare host AIrail does talk to (`HTTPClient.blockedName`, shared by
+  `check` and the refused-redirect branch). The launch scrub no longer
+  removes the whole `Caches/<bundle id>` directory, only v0.2.0's artefacts
+  in it — `Cache.db`, `Cache.db-shm`, `Cache.db-wal`, `fsCachedData/` — plus
+  the `.binarycookies` file. The allowlist test is built from the providers'
+  own URL constants (`private` dropped on the four tool providers'
+  `usageURL`/`eventsURL`/`quotaURL`; OpenRouter's and DeepSeek's inline
+  literals hoisted to `OpenRouterUsage.keyURL`/`creditsURL` and
+  `DeepSeekUsage.balanceURL`) and also checks that every host on the list has
+  an endpoint using it, so an endpoint change is caught in either direction.
 - **By hand, Vincent:** run `TEST_RUNNER_AIRAIL_LIVE=1 xcodebuild -scheme
   AIrail test` once on this build. Dropping the cookie jar is the one thing a
   Cloudflare-fronted host (chatgpt.com, cursor.com) could notice, and I could
@@ -293,7 +308,22 @@ Things established that reverse or extend earlier notes:
   is the reusable half for cost-by-model. The HUD shows the line only for a
   non-demo snapshot with `spend == nil` and `week.cost == 0` — a reported spend
   or Cursor's per-request cents beat an estimate of the same thing.
-- **By hand, Vincent:** the prices are from memory as of 2026-09-06 and could
+- **Polish (2026-09-07):** rows added so a cheap variant never prices at its
+  family rate and an alias isn't missed: Opus 4 as "opus-4.0", "4-opus" and
+  "4.1-opus" (the version-first spellings) at the Opus 4/4.1 prices already
+  in the table, and gpt-4.1-mini 0.4/1.6, gpt-4o-mini 0.15/0.6, o3-mini
+  1.1/4.4, o3-pro 20/80 (cache reads 0.1/0.075/0.55/5). Longest-key-wins is
+  unchanged; one assertion per new row. The value-line gate was too wide a
+  net: `spend == nil` hid the line for a Claude subscription with extra usage
+  switched on, whose `spend` is the overage (often $0.00), not a price on the
+  plan's tokens. Now `status != .demo && week.cost == 0 && (spend == nil ||
+  info.kind == .tool)`. The signal is `ProviderInfo.kind` (`.tool` vs
+  `.apiKey`), already on the view's input and exactly the subscription-tool /
+  keyed-platform split; `spendPeriod` was the alternative and lost because
+  Claude's extra usage is tagged `.month` like the two org cost reports, and
+  `KeyedUsageProviding` would mean reaching back into the manager from the
+  view. Cursor is `.tool` too, but its week carries per-request cents, so
+  `week.cost == 0` keeps its line off whenever it has priced events.
   not be checked against the vendors from here; check `ModelPricing.table`
   before cutting v0.3.0 (now a line in README › Releasing and the go-public
   checklist). The v0.2.0 install left `modelPricesCache`/`modelPricesCacheDate`
@@ -346,7 +376,10 @@ Things established that reverse or extend earlier notes:
   36 lines in, 88 out.
 - **Rule from here:** the ledger, level line and pace build on
   `detail.days: [UsageBucket]`; nobody revives a parallel `[Double]`. The
-  used-elsewhere item re-adds the newest event as `UsageDetail.newestLocalEvent`.
+  used-elsewhere item re-adds the newest event as `UsageDetail.newestLocalEvent`
+  (`ROADMAP.md`'s used-elsewhere and adaptive-refresh "How" lines now say so:
+  a max over `event.date` in `TranscriptScanner.ingest`, exposed as
+  `Summary.newestEventDate`, since this block deleted the field).
 - 45 tests green; six test sites moved to `detail.days`, none added.
 
 ## Hardened, attested builds (2026-09-06)
@@ -381,6 +414,16 @@ Things established that reverse or extend earlier notes:
   Dev"` isn't ambiguous. One Claude Keychain re-prompt follows (new designated
   requirement); the timestamp keeps old signatures valid past 2027-09-02.
 - 45 tests green (+1, `BuildInfo.label`).
+- **Polish (2026-09-07):** `COMMIT` now has the same fallback as `VERSION`
+  (`git describe … 2>/dev/null || true`); outside a checkout the build log
+  says just the version and the `AIrailCommit` PlistBuddy step is skipped, so
+  Settings › General shows the bare version rather than an empty commit.
+  `ROADMAP.md`'s tick line for this item now says inline what landed and what
+  waits (cert at v0.3.0, attestation at go-public).
+- **Unverified, Vincent:** `GeneralPane` grew from `.frame(height: 320)` to
+  380 for the Version row without a run of the app. Verify by launching,
+  opening Settings › General and looking for a scrollbar (too short) or dead
+  space under the Version row (too tall); adjust the number.
 
 ## Where things stand (resume here)
 

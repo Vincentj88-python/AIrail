@@ -29,7 +29,7 @@ enum HTTPClient {
     /// refuses redirects off the list. Waiting for connectivity (bounded by
     /// the resource timeout) is what lets a wake-from-sleep read succeed
     /// instead of failing while the network is still coming up.
-    static let session: URLSession = {
+    private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
@@ -40,6 +40,12 @@ enum HTTPClient {
         configuration.timeoutIntervalForResource = 30
         return URLSession(configuration: configuration, delegate: RedirectGuard(), delegateQueue: nil)
     }()
+
+    /// What the session was built with — a copy, so nothing can change it —
+    /// and whether the redirect guard is attached. Read by the tests; nothing
+    /// outside this type touches the session itself.
+    static var configuration: URLSessionConfiguration { session.configuration }
+    static var hasRedirectGuard: Bool { session.delegate is URLSessionTaskDelegate }
 
     static func get(_ url: URL, headers: [String: String], timeout: TimeInterval = 15) async throws -> Response {
         try await send(url, method: "GET", headers: headers, body: nil, timeout: timeout)
@@ -74,7 +80,8 @@ enum HTTPClient {
         // A redirect gets this far only because `RedirectGuard` refused to
         // follow it, so say where it pointed rather than "HTTP 302".
         if (300..<400).contains(status), let location = http?.value(forHTTPHeaderField: "Location") {
-            throw ConnectionError.blockedHost(URL(string: location, relativeTo: url)?.absoluteURL.host() ?? location)
+            let target = URL(string: location, relativeTo: url)?.absoluteURL
+            throw ConnectionError.blockedHost(target.map(blockedName) ?? location)
         }
         return Response(
             status: status,
@@ -89,8 +96,19 @@ enum HTTPClient {
     /// `allowedHosts` — the one guard `send` and the redirect delegate share.
     static func check(_ url: URL) throws {
         guard isAllowed(url) else {
-            throw ConnectionError.blockedHost(url.host() ?? url.absoluteString)
+            throw ConnectionError.blockedHost(blockedName(url))
         }
+    }
+
+    /// What a `blockedHost` error names: the bare host when the host itself
+    /// is off the list, or scheme, host and any port ("http://api.anthropic.com")
+    /// when the host is allowed but the way of reaching it is not — the message
+    /// must never blame a host AIrail does connect to.
+    static func blockedName(_ url: URL) -> String {
+        guard let host = url.host()?.lowercased() else { return url.absoluteString }
+        guard allowedHosts.contains(host) else { return host }
+        let scheme = url.scheme?.lowercased() ?? "?"
+        return "\(scheme)://\(host)" + (url.port.map { ":\($0)" } ?? "")
     }
 
     static func isAllowed(_ url: URL?) -> Bool {
@@ -116,17 +134,23 @@ enum HTTPClient {
     /// v0.2.0 went through `URLSession.shared`, whose disk cache kept usage
     /// responses under ~/Library/Caches and whose cookie jar kept edge-gateway
     /// cookies under ~/Library/HTTPStorages. The session above never opens
-    /// either, so they are simply removed at launch — a no-op once gone. The
-    /// bundle's `HTTPStorages/<id>/httpstorages.sqlite` (Alt-Svc hints, no
-    /// personal data) is left alone.
+    /// either, so those artefacts — and only those — are removed at launch, a
+    /// no-op once gone: the cache database with its journal and body files,
+    /// and the cookie file. The cache directory itself, anything else in it,
+    /// and the bundle's `HTTPStorages/<id>/httpstorages.sqlite` (Alt-Svc
+    /// hints, no personal data) are left alone.
     static func removeLegacyStores(
         bundleId: String? = Bundle.main.bundleIdentifier,
         library: URL = URL(fileURLWithPath: NSHomeDirectory() + "/Library")
     ) {
         guard let bundleId, !bundleId.isEmpty else { return }
         let manager = FileManager.default
+        let cache = library.appending(path: "Caches/\(bundleId)")
         let leftovers = [
-            library.appending(path: "Caches/\(bundleId)"),
+            cache.appending(path: "Cache.db"),
+            cache.appending(path: "Cache.db-shm"),
+            cache.appending(path: "Cache.db-wal"),
+            cache.appending(path: "fsCachedData"),
             library.appending(path: "HTTPStorages/\(bundleId).binarycookies"),
         ]
         for url in leftovers where manager.fileExists(atPath: url.path) {
