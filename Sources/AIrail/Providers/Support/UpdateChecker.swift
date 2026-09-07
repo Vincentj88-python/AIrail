@@ -61,15 +61,15 @@ enum UpdateChecker {
 
     static var currentVersion: String { BuildInfo.version }
 
+    /// The one request in the app that isn't a connected tool's usage check;
+    /// it rides the same allowlisted session as those.
+    static var latestReleaseURL: URL { URL(string: "https://api.github.com/repos/\(repo)/releases/latest")! }
+
     private static func latestRelease() async throws -> Release? {
-        var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("AIrail", forHTTPHeaderField: "User-Agent")
-        request.timeoutInterval = 15
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let response = try await HTTPClient.get(latestReleaseURL, headers: ["Accept": "application/vnd.github+json"])
         // 404 while the repo is private or has no published (non-draft) release.
-        guard (response as? HTTPURLResponse)?.statusCode == 200,
-              let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard response.status == 200,
+              let json = try JSONSerialization.jsonObject(with: response.data) as? [String: Any]
         else { return nil }
 
         let tag = (json["tag_name"] as? String) ?? ""

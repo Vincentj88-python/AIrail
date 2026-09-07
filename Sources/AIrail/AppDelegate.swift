@@ -56,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The tests drive ProviderManager with fakes; the host app they run
         // in must not poll live endpoints (or prompt for the Keychain) too.
         if !LaunchOptions.isRunningTests {
+            HTTPClient.removeLegacyStores() // v0.2.0's cache and cookie jar, before the first read
             providerManager.start()
             UpdateChecker.checkInBackgroundIfDue()
         }

@@ -34,6 +34,9 @@ enum ConnectionError: LocalizedError, Sendable {
     case temporarilyUnavailable(tool: String)
     case unreadable(String)
     case network(String)
+    /// A request or redirect to a host that isn't on `HTTPClient.allowedHosts`
+    /// — a bug in AIrail's own code paths, never something a retry fixes.
+    case blockedHost(String)
     case unsupported
 
     var errorDescription: String? {
@@ -59,6 +62,8 @@ enum ConnectionError: LocalizedError, Sendable {
             return "Couldn't read the local data: \(detail)"
         case .network(let detail):
             return "Couldn't reach the service: \(detail)"
+        case .blockedHost(let host):
+            return "AIrail doesn't connect to \(host); it only talks to the services it lists."
         case .unsupported:
             return "This account isn't supported yet."
         }
@@ -77,6 +82,7 @@ enum ConnectionError: LocalizedError, Sendable {
         case .temporarilyUnavailable: return "Reading sign-in — retrying"
         case .unreadable: return "Couldn't read local data"
         case .network: return "Couldn't reach service"
+        case .blockedHost: return "Host not on AIrail's list"
         case .unsupported: return "Not supported yet"
         }
     }
@@ -86,7 +92,7 @@ enum ConnectionError: LocalizedError, Sendable {
     var isTransient: Bool {
         switch self {
         case .expired, .network, .accessDenied, .rateLimited, .temporarilyUnavailable: return true
-        case .notInstalled, .notSignedIn, .missingKey, .invalidKey, .unreadable, .unsupported: return false
+        case .notInstalled, .notSignedIn, .missingKey, .invalidKey, .unreadable, .blockedHost, .unsupported: return false
         }
     }
 }

@@ -62,6 +62,40 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## One network path, allowlisted (2026-09-06)
+
+- **What was wrong:** every request went through `URLSession.shared`, whose
+  disk cache kept the usage bodies (api.anthropic.com, api.github.com,
+  chatgpt.com, cursor.com) and whose cookie jar kept chatgpt.com's
+  `__cf_bm`/`__oailb` cookies under `~/Library/Caches/com.codeandvin.airail`
+  and `~/Library/HTTPStorages` — README's "keeps no tokens on disk" was
+  false — and nothing stopped a redirect (or a typo) from carrying a bearer
+  token to some other host.
+- **Fix:** `HTTPClient.session` is one ephemeral session — `urlCache` nil,
+  `httpCookieStorage` nil, cookies never set nor accepted, `User-Agent:
+  AIrail`, waits for connectivity, 30 s resource timeout — with a
+  `RedirectGuard` delegate that refuses any redirect off
+  `HTTPClient.allowedHosts` (seven hosts, named in code and in README).
+  `send` throws the new non-transient `ConnectionError.blockedHost` before a
+  task exists for anything that isn't https to a listed host on the default
+  port; a refused redirect surfaces as the same error naming where it
+  pointed. `UpdateChecker` rides the same session through `HTTPClient.get`.
+  At launch `HTTPClient.removeLegacyStores()` deletes v0.2.0's
+  `Caches/<bundle id>` and `HTTPStorages/<bundle id>.binarycookies` (the
+  Alt-Svc `httpstorages.sqlite` stays: no personal data in it) — every
+  launch, a no-op once gone, so there is no migration flag to keep.
+- **By hand, Vincent:** run `TEST_RUNNER_AIRAIL_LIVE=1 xcodebuild -scheme
+  AIrail test` once on this build. Dropping the cookie jar is the one thing a
+  Cloudflare-fronted host (chatgpt.com, cursor.com) could notice, and I could
+  not touch the network from here; a Cursor or Codex read that starts
+  answering "HTTP 403" is where to look.
+- **Follow-ups:** the Privacy pane (block E) reads `HTTPClient.allowedHosts`
+  for its "where it connects" list; the sleep/wake item (block B) reuses this
+  session and its `waitsForConnectivity`; add `live.dodopayments.com` to the
+  list only if the licence ships.
+- 61 tests green (+4): session config, every endpoint allowed, off-list /
+  http / port / subdomain refused before any task, scrub leaves Alt-Svc alone.
+
 ## Simplify: static price table (2026-09-06)
 
 - **What was wrong:** `ModelPricing` fetched openrouter.ai's model catalogue

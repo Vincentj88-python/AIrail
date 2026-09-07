@@ -1,13 +1,45 @@
 import Foundation
 
 /// The only network path in the app: one GET per provider per refresh, to the
-/// provider's own usage endpoint, carrying the sign-in that tool already holds.
+/// provider's own usage endpoint, carrying the sign-in that tool already holds
+/// (plus the release check). Everything goes through one ephemeral session that
+/// keeps no cache and no cookie jar and can only reach `allowedHosts`.
 enum HTTPClient {
     struct Response: Sendable {
         let status: Int
         let data: Data
         var retryAfter: Date? = nil
     }
+
+    /// Every host AIrail will ever contact. A request or redirect anywhere
+    /// else is refused before a task exists; README names these same seven.
+    static let allowedHosts: Set<String> = [
+        "api.anthropic.com", // Claude Code's OAuth usage; the Anthropic API usage report
+        "chatgpt.com",       // Codex's usage windows
+        "api.github.com",    // Copilot's quota; the release check
+        "cursor.com",        // Cursor's dashboard reads
+        "openrouter.ai",     // OpenRouter key limit and credits
+        "api.deepseek.com",  // DeepSeek balance
+        "api.openai.com",    // the OpenAI API usage report
+    ]
+
+    /// One session for the life of the process: ephemeral, so nothing touches
+    /// disk; no URL cache and no cookie storage at all, so a usage body or an
+    /// edge-gateway cookie never outlives its request; and a delegate that
+    /// refuses redirects off the list. Waiting for connectivity (bounded by
+    /// the resource timeout) is what lets a wake-from-sleep read succeed
+    /// instead of failing while the network is still coming up.
+    static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.httpAdditionalHeaders = ["User-Agent": "AIrail"]
+        configuration.waitsForConnectivity = true
+        configuration.timeoutIntervalForResource = 30
+        return URLSession(configuration: configuration, delegate: RedirectGuard(), delegateQueue: nil)
+    }()
 
     static func get(_ url: URL, headers: [String: String], timeout: TimeInterval = 15) async throws -> Response {
         try await send(url, method: "GET", headers: headers, body: nil, timeout: timeout)
@@ -23,23 +55,82 @@ enum HTTPClient {
     }
 
     private static func send(_ url: URL, method: String, headers: [String: String], body: Data?, timeout: TimeInterval) async throws -> Response {
+        try check(url)
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
         request.httpMethod = method
         request.httpBody = body
-        request.setValue("AIrail", forHTTPHeaderField: "User-Agent")
         for (field, value) in headers {
             request.setValue(value, forHTTPHeaderField: field)
         }
+        let data: Data
+        let response: URLResponse
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            let http = response as? HTTPURLResponse
-            return Response(
-                status: http?.statusCode ?? 0,
-                data: data,
-                retryAfter: (http?.value(forHTTPHeaderField: "Retry-After")).flatMap(Self.retryAfterDate)
-            )
+            (data, response) = try await session.data(for: request)
         } catch {
             throw ConnectionError.network(error.localizedDescription)
+        }
+        let http = response as? HTTPURLResponse
+        let status = http?.statusCode ?? 0
+        // A redirect gets this far only because `RedirectGuard` refused to
+        // follow it, so say where it pointed rather than "HTTP 302".
+        if (300..<400).contains(status), let location = http?.value(forHTTPHeaderField: "Location") {
+            throw ConnectionError.blockedHost(URL(string: location, relativeTo: url)?.absoluteURL.host() ?? location)
+        }
+        return Response(
+            status: status,
+            data: data,
+            retryAfter: (http?.value(forHTTPHeaderField: "Retry-After")).flatMap(Self.retryAfterDate)
+        )
+    }
+
+    // MARK: Allowlist
+
+    /// Refuses, before any task exists, anything that isn't https to a host on
+    /// `allowedHosts` — the one guard `send` and the redirect delegate share.
+    static func check(_ url: URL) throws {
+        guard isAllowed(url) else {
+            throw ConnectionError.blockedHost(url.host() ?? url.absoluteString)
+        }
+    }
+
+    static func isAllowed(_ url: URL?) -> Bool {
+        guard let url, url.scheme?.lowercased() == "https", url.port == nil,
+              let host = url.host()?.lowercased()
+        else { return false }
+        return allowedHosts.contains(host)
+    }
+
+    /// Session delegate: a redirect may only land on the list. Completing
+    /// with nil delivers the 3xx itself instead, which `send` then names.
+    private final class RedirectGuard: NSObject, URLSessionTaskDelegate, Sendable {
+        func urlSession(
+            _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+            newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void
+        ) {
+            completionHandler(HTTPClient.isAllowed(request.url) ? request : nil)
+        }
+    }
+
+    // MARK: Legacy stores
+
+    /// v0.2.0 went through `URLSession.shared`, whose disk cache kept usage
+    /// responses under ~/Library/Caches and whose cookie jar kept edge-gateway
+    /// cookies under ~/Library/HTTPStorages. The session above never opens
+    /// either, so they are simply removed at launch — a no-op once gone. The
+    /// bundle's `HTTPStorages/<id>/httpstorages.sqlite` (Alt-Svc hints, no
+    /// personal data) is left alone.
+    static func removeLegacyStores(
+        bundleId: String? = Bundle.main.bundleIdentifier,
+        library: URL = URL(fileURLWithPath: NSHomeDirectory() + "/Library")
+    ) {
+        guard let bundleId, !bundleId.isEmpty else { return }
+        let manager = FileManager.default
+        let leftovers = [
+            library.appending(path: "Caches/\(bundleId)"),
+            library.appending(path: "HTTPStorages/\(bundleId).binarycookies"),
+        ]
+        for url in leftovers where manager.fileExists(atPath: url.path) {
+            try? manager.removeItem(at: url)
         }
     }
 

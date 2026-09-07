@@ -777,6 +777,93 @@ final class AIrailTests: XCTestCase {
         XCTAssertNil(BuildInfo.commit, "only release.sh stamps AIrailCommit; a test host has none")
     }
 
+    // MARK: Network path
+
+    func testNetworkSessionKeepsNothingOnDisk() {
+        let configuration = HTTPClient.session.configuration
+        XCTAssertNil(configuration.urlCache, "no URL cache: a usage body never lands in ~/Library/Caches")
+        XCTAssertNil(configuration.httpCookieStorage, "no cookie jar: an edge-gateway cookie never lands in HTTPStorages")
+        XCTAssertFalse(configuration.httpShouldSetCookies)
+        XCTAssertEqual(configuration.httpCookieAcceptPolicy, .never)
+        XCTAssertEqual(configuration.httpAdditionalHeaders?["User-Agent"] as? String, "AIrail")
+        XCTAssertTrue(configuration.waitsForConnectivity)
+        XCTAssertEqual(configuration.timeoutIntervalForResource, 30)
+    }
+
+    @MainActor
+    func testEveryEndpointIsOnTheAllowlist() throws {
+        // One URL per endpoint the providers actually hit, plus the release check.
+        var endpoints = try [
+            "https://api.anthropic.com/api/oauth/usage",
+            "https://chatgpt.com/backend-api/wham/usage",
+            "https://api.github.com/copilot_internal/user",
+            "https://cursor.com/api/usage-summary",
+            "https://cursor.com/api/dashboard/get-filtered-usage-events",
+            "https://openrouter.ai/api/v1/auth/key",
+            "https://openrouter.ai/api/v1/credits",
+            "https://api.deepseek.com/user/balance",
+        ].map { try XCTUnwrap(URL(string: $0)) }
+        endpoints += [AnthropicAPIUsage.usageURL(now: .now), OpenAIAPIUsage.usageURL(now: .now), UpdateChecker.latestReleaseURL]
+        for url in endpoints {
+            XCTAssertTrue(HTTPClient.isAllowed(url), url.absoluteString)
+            XCTAssertNoThrow(try HTTPClient.check(url), url.absoluteString)
+        }
+        XCTAssertEqual(HTTPClient.allowedHosts.count, 7, "README says seven hosts; keep the two in step")
+    }
+
+    func testOffListHostsAreRefusedBeforeAnyRequest() async throws {
+        let blocked = [
+            "https://example.com/usage",                 // not on the list
+            "http://api.anthropic.com/api/oauth/usage",  // not https
+            "https://api.anthropic.com:8443/usage",      // not the default port
+            "https://evil.api.anthropic.com/usage",      // a subdomain is another host
+        ]
+        for text in blocked {
+            let url = try XCTUnwrap(URL(string: text))
+            XCTAssertFalse(HTTPClient.isAllowed(url), text)
+            XCTAssertThrowsError(try HTTPClient.check(url), text) { error in
+                guard let failure = error as? ConnectionError, case .blockedHost = failure else {
+                    return XCTFail("\(text): \(error)")
+                }
+            }
+        }
+        XCTAssertFalse(HTTPClient.isAllowed(nil))
+
+        // The guard runs before a task exists, so this never touches the network.
+        do {
+            _ = try await HTTPClient.get(try XCTUnwrap(URL(string: "https://example.com/")), headers: [:])
+            XCTFail("an off-list GET must throw")
+        } catch let failure as ConnectionError {
+            guard case .blockedHost(let host) = failure else { return XCTFail("\(failure)") }
+            XCTAssertEqual(host, "example.com")
+            XCTAssertFalse(failure.isTransient, "a wrong host is a bug in AIrail, not something a retry fixes")
+            XCTAssertEqual(failure.shortDescription, "Host not on AIrail's list")
+        }
+    }
+
+    func testLegacyStoreScrubLeavesTheAltSvcDatabase() throws {
+        let manager = FileManager.default
+        let library = manager.temporaryDirectory.appending(path: "airail-scrub-\(UUID().uuidString)")
+        defer { try? manager.removeItem(at: library) }
+        let id = "com.example.airail-test"
+        let cache = library.appending(path: "Caches/\(id)/Cache.db")
+        let cookies = library.appending(path: "HTTPStorages/\(id).binarycookies")
+        let altSvc = library.appending(path: "HTTPStorages/\(id)/httpstorages.sqlite")
+        for file in [cache, cookies, altSvc] {
+            try manager.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: file)
+        }
+
+        HTTPClient.removeLegacyStores(bundleId: id, library: library)
+
+        XCTAssertFalse(manager.fileExists(atPath: cache.deletingLastPathComponent().path), "the whole cache directory goes")
+        XCTAssertFalse(manager.fileExists(atPath: cookies.path))
+        XCTAssertTrue(manager.fileExists(atPath: altSvc.path), "Alt-Svc hints hold no personal data and stay")
+        HTTPClient.removeLegacyStores(bundleId: id, library: library) // a no-op once gone
+        HTTPClient.removeLegacyStores(bundleId: nil, library: library)
+        XCTAssertTrue(manager.fileExists(atPath: altSvc.path))
+    }
+
     // MARK: Helpers
 
     private static func json(_ text: String) throws -> JSONObject {
