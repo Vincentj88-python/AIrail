@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftUI
 
@@ -13,7 +14,7 @@ final class ClaudeProvider: UsageProviding {
         toolName: "Claude Code",
         summary: "Uses your Claude Code sign-in",
         explainer: "AIrail reads the sign-in Claude Code keeps in your Keychain and asks Anthropic for your plan's current 5-hour and weekly limits — the same numbers Claude Code's /usage shows. Your local session transcripts in ~/.claude provide the 24-hour and 7-day charts, the by-model and by-project breakdown, and the tool counts. Nothing is written back, and the refresh token is never used.",
-        caveat: "macOS asks before AIrail can read the Keychain item. Choose “Always Allow” so it stops asking; it may ask again after Claude Code renews its sign-in."
+        caveat: "macOS asks before AIrail can read the Keychain item. Choose “Always Allow” so it stops asking; it may ask again after Claude Code renews its sign-in. If Claude Code runs with CLAUDE_CONFIG_DIR pointing somewhere other than ~/.claude, AIrail can't see that shell setting and may not find the item."
     )
 
     let demoProfile = MockUsageEngine.Profile(
@@ -22,7 +23,8 @@ final class ClaudeProvider: UsageProviding {
         demoModels: ["claude-opus-5", "claude-sonnet-5"]
     )
 
-    private static let keychainService = "Claude Code-credentials"
+    /// The Keychain item the sign-in was last found under; nil until the first read.
+    private var keychainService: String?
     static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
     private var credential: ClaudeUsage.Credential?
@@ -68,11 +70,20 @@ final class ClaudeProvider: UsageProviding {
         if let credential, let expiresAt = credential.expiresAt, expiresAt > Date().addingTimeInterval(60) {
             return credential
         }
-        let service = Self.keychainService
         let tool = connection.toolName
-        let data = try await Task.detached {
-            try KeychainReader.genericPassword(service: service, tool: tool)
+        let known = keychainService
+        let candidates = ClaudeUsage.keychainServices()
+        let (service, data) = try await Task.detached { () throws -> (String, Data) in
+            if let known {
+                do {
+                    return (known, try KeychainReader.genericPassword(service: known, tool: tool))
+                } catch ConnectionError.notSignedIn {
+                    // Renamed or removed since: look at every candidate again.
+                }
+            }
+            return try KeychainReader.genericPassword(services: candidates, tool: tool)
         }.value
+        keychainService = service
         let fresh = try ClaudeUsage.credential(from: data)
         if let expiresAt = fresh.expiresAt, expiresAt < Date() {
             throw ConnectionError.expired(tool: connection.toolName)
@@ -97,6 +108,29 @@ enum ClaudeUsage {
         var weeklyResetsAt: Date?
         var extraSpend: Double?
         var extraCap: Double?
+    }
+
+    /// The Keychain items Claude Code may keep its sign-in under. The plain
+    /// name is the default; with CLAUDE_CONFIG_DIR set, Claude Code appends
+    /// "-" and the first eight hex digits of SHA-256 over the NFC-normalised
+    /// path, verbatim. A launchd-spawned app never sees a shell export, so the
+    /// default folder's hash (the common `export CLAUDE_CONFIG_DIR=$HOME/.claude`)
+    /// is guessed alongside any value in AIrail's own environment.
+    static func keychainServices(
+        home: String = NSHomeDirectory(),
+        configDir: String? = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]
+    ) -> [String] {
+        let base = "Claude Code-credentials"
+        var paths = [home + "/.claude"]
+        if let configDir, !configDir.isEmpty { paths.append(configDir) }
+        var names = [base]
+        for path in paths {
+            let normalized = path.precomposedStringWithCanonicalMapping
+            let hex = SHA256.hash(data: Data(normalized.utf8)).map { String(format: "%02x", $0) }.joined()
+            let name = base + "-" + hex.prefix(8)
+            if !names.contains(name) { names.append(name) }
+        }
+        return names
     }
 
     /// The Keychain item is JSON: `{"claudeAiOauth": {"accessToken": …, "expiresAt": <ms>, "subscriptionType": "max"}}`.

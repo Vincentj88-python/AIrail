@@ -43,4 +43,34 @@ enum KeychainReader {
         _ = lastStatus
         throw ConnectionError.temporarilyUnavailable(tool: tool)
     }
+
+    /// Reads whichever of several candidate items exists — the most recently
+    /// modified when more than one does — and says which it was. Only the
+    /// one data read can prompt; the probe never does.
+    static func genericPassword(services: [String], tool: String) throws -> (service: String, data: Data) {
+        guard let service = existingServices(services).first else {
+            throw ConnectionError.notSignedIn(tool: tool)
+        }
+        return (service, try genericPassword(service: service, tool: tool))
+    }
+
+    /// Which of the candidate items exist, newest modification first. An
+    /// attributes-only query is answered without the consent dialog, so this
+    /// costs nothing to ask for names that turn out not to be there.
+    static func existingServices(_ services: [String]) -> [String] {
+        var found: [(service: String, modified: Date)] = []
+        for service in services {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecReturnAttributes as String: true,
+                kSecMatchLimit as String: kSecMatchLimitOne,
+            ]
+            var item: CFTypeRef?
+            guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else { continue }
+            let modified = (item as? [String: Any])?[kSecAttrModificationDate as String] as? Date ?? .distantPast
+            found.append((service, modified))
+        }
+        return found.sorted { $0.modified > $1.modified }.map(\.service)
+    }
 }

@@ -71,6 +71,25 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Hashed Claude Keychain name (2026-09-07)
+
+Block B. Claude Code names its Keychain item "Claude Code-credentials" by
+default and "Claude Code-credentials-<sha8>" when `CLAUDE_CONFIG_DIR` is set —
+the first eight hex digits of SHA-256 over the NFC-normalised path, verbatim
+(confirmed against openusage's decompiled builder and Anthropic's auth doc;
+this Mac, env unset, has only the legacy item). Anyone exporting the variable
+— including the common `export CLAUDE_CONFIG_DIR="$HOME/.claude"` — got a
+hard "not signed in" and a blank account. A launchd-spawned app never sees a
+shell export, so `ClaudeUsage.keychainServices(home:configDir:)` returns the
+legacy name, the default folder's hash and any value in AIrail's own
+environment; `KeychainReader.existingServices` probes them attributes-only
+(no consent dialog — verified prompt-free) and `genericPassword(services:)`
+reads the most recently modified one. `ClaudeProvider` remembers the winning
+name and only re-enumerates when it disappears. A renamed item costs one
+extra "Always Allow" (inherent; sticks with the stable signing identity).
+`CryptoKit` is now imported in ClaudeProvider.swift. Caveat sentence added to
+the account page. 77 green (+1).
+
 ## Stale numbers expire at their reset (2026-09-07)
 
 Block B. A stale 88% ring past its own reset, and an amber hairline all

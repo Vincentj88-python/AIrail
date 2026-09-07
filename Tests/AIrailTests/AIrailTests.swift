@@ -345,6 +345,38 @@ final class AIrailTests: XCTestCase {
 
     // MARK: Claude
 
+    /// Claude Code names its Keychain item after CLAUDE_CONFIG_DIR: the plain
+    /// name when unset, "-<sha8>" of the NFC path when set. AIrail can't see
+    /// a shell export, so it tries the legacy name, the default folder's hash
+    /// and any value in its own environment, in that order.
+    func testClaudeKeychainServiceNamesFollowTheConfigDir() {
+        XCTAssertEqual(
+            ClaudeUsage.keychainServices(home: "/Users/vincentjacobs", configDir: nil),
+            ["Claude Code-credentials", "Claude Code-credentials-88404443"]
+        )
+        XCTAssertEqual(
+            ClaudeUsage.keychainServices(home: "/Users/vincentjacobs", configDir: "/tmp/claude-work"),
+            ["Claude Code-credentials", "Claude Code-credentials-88404443", "Claude Code-credentials-bfc1769a"]
+        )
+        XCTAssertEqual(
+            ClaudeUsage.keychainServices(home: "/Users/vincentjacobs", configDir: "/Users/vincentjacobs/.claude").count, 2,
+            "exporting the default folder names the same item"
+        )
+        let decomposed = "/Users/Ame\u{0301}lie/.claude"
+        let composed = "/Users/Am\u{00E9}lie/.claude"
+        XCTAssertEqual(
+            ClaudeUsage.keychainServices(home: "/x", configDir: decomposed).last,
+            ClaudeUsage.keychainServices(home: "/x", configDir: composed).last,
+            "hashed over the NFC form, as Claude Code does"
+        )
+        // Names that don't exist are answered without a prompt and without a read.
+        let absent = ["AIrail-no-such-item-\(UUID().uuidString)"]
+        XCTAssertTrue(KeychainReader.existingServices(absent).isEmpty)
+        XCTAssertThrowsError(try KeychainReader.genericPassword(services: absent, tool: "Test")) { error in
+            XCTAssertEqual((error as? ConnectionError)?.shortDescription, "Test not signed in")
+        }
+    }
+
     func testClaudeCredentialFromKeychainJSON() throws {
         let json = #"{"claudeAiOauth":{"accessToken":"sk-ant-oat01-abc","refreshToken":"r","expiresAt":1788330749016,"scopes":["user:inference"],"subscriptionType":"max"}}"#
         let credential = try ClaudeUsage.credential(from: Data(json.utf8))

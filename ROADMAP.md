@@ -102,7 +102,7 @@ Five ordered blocks; each lands before the next touches the same files. v0.2.1 =
   - How: UsageSnapshot.expiringWindows(now:) nils session fields when resetsAt < now, weekly fields plus detail.meters when weeklyResetsAt < now, records `expiredResetAt`. ProviderManager.refresh applies it in the catch (lastLive.marking(.stale).expiringWindows()) and in the backoff early-return (assign only on change), calling notifier.forget and clearing percentHistory on first expiry. OverlayView.notice appends 'The session window reset Fri 14:30 — nothing read since'. Test beside testStaleMarkingKeepsNumbers.
   - Why here: Block B: an amber hairline all weekend from a window that no longer exists is a known-false reading wearing a smaller badge (principle 4). ~40 lines, no setting.
 
-- [ ] **Hashed Claude Keychain name** · hours · wow 1/5 · `hashed-claude-keychain-name`
+- [x] **Hashed Claude Keychain name** · hours · wow 1/5 · `hashed-claude-keychain-name`
   Try `Claude Code-credentials-<sha8>` beside the legacy item so CLAUDE_CONFIG_DIR users are not blanked.
   - How: ClaudeUsage.keychainServices(configDir:) returns the legacy name plus 'Claude Code-credentials-' + first 8 hex of CryptoKit SHA256 over the NFC path (~/.claude, plus the env var when present). KeychainReader.genericPassword(services:tool:) probes attributes-only (no prompt), reads data from the most recently modified candidate, throws .notSignedIn only when all are missing. ClaudeProvider remembers the winning name; one test; one caveat sentence.
   - Why here: Block B: table-stakes robustness, and work-personal-accounts (tier 2) reuses keychainServices verbatim.
