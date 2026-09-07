@@ -711,19 +711,49 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(UsageFormatting.duration(hours: 72), "3.0 days")
     }
 
-    @MainActor
-    func testAPIValueEstimateUsesCacheAwarePricing() {
+    func testAPIValueEstimateApportionsTheWeekByModel() throws {
         var week = UsageAggregate()
-        // Opus-dominant week, mostly cheap cache reads. Uses the offline
-        // fallback table in tests (no network): opus 5/25/6.25/0.5 per Mtok.
+        // Mostly cheap cache reads: opus 5/25/6.25/0.5 per Mtok → $23.125,
+        // haiku 1/5/1.25/0.1 → $4.625; three quarters opus, one quarter haiku.
         week.tokens = TokenSplit(input: 1_000_000, output: 200_000, cacheWrite: 500_000, cacheRead: 20_000_000)
-        week.models = ["claude-opus-5": 21_700_000]
-        let dollars = ModelPricing.estimate(week)!
-        XCTAssertEqual(dollars, 5 + 5 + 3.125 + 10, accuracy: 0.01)
+        week.models = ["claude-opus-4-8": 16_275_000, "claude-haiku-4-5": 5_425_000]
+        let dollars = try XCTUnwrap(ModelPricing.estimate(week))
+        XCTAssertEqual(dollars, 0.75 * 23.125 + 0.25 * 4.625, accuracy: 0.001)
+
+        week.models = [:]
+        XCTAssertEqual(ModelPricing.estimate(week), TokenPrices.unlisted.cost(of: week.tokens), "no model breakdown → the unlisted rate")
         XCTAssertNil(ModelPricing.estimate(UsageAggregate()), "no tokens → no estimate")
     }
 
-    @MainActor
+    func testModelPricingPicksTheMostSpecificRow() {
+        // A version with its own price beats its family row — and only that version.
+        XCTAssertEqual(ModelPricing.prices(for: "claude-opus-4-1-20250805").input, 15)
+        XCTAssertEqual(ModelPricing.prices(for: "claude-opus-4-20250514").input, 15)
+        XCTAssertEqual(ModelPricing.prices(for: "claude-opus-4-8").input, 5)
+        XCTAssertEqual(ModelPricing.prices(for: "anthropic/claude-opus-5:batch").input, 5)
+        XCTAssertEqual(ModelPricing.prices(for: "claude-3-5-haiku-20241022").input, 1)
+        XCTAssertEqual(ModelPricing.prices(for: "gpt-5-mini").input, 0.25)
+        XCTAssertEqual(ModelPricing.prices(for: "gpt-5.2-codex").input, 1.75)
+        XCTAssertEqual(ModelPricing.prices(for: "gpt-5.5-mini").input, 1.25, "an unknown 5.x reads as the gpt-5 row")
+        // Keys fit anywhere at a boundary (Cursor's ids), never inside a word.
+        XCTAssertEqual(ModelPricing.prices(for: "cursor-grok-4.6-high-fast").input, 3)
+        XCTAssertEqual(ModelPricing.prices(for: "gemini-3-pro").input, 2, "a bare family id is the family row, not a longer sibling")
+        XCTAssertEqual(ModelPricing.prices(for: "chatgpt-4o-latest"), .unlisted)
+        XCTAssertEqual(ModelPricing.prices(for: "auto"), .unlisted)
+    }
+
+    func testPriceTableIsWellFormed() {
+        let keys = ModelPricing.table.map(\.key)
+        XCTAssertEqual(Set(keys).count, keys.count, "duplicate keys")
+        for row in ModelPricing.table {
+            XCTAssertEqual(row.key, ModelPricing.normalize(row.key), "\(row.key) is not in normalized form")
+            XCTAssertGreaterThan(row.prices.input, 0, row.key)
+            XCTAssertGreaterThan(row.prices.output, row.prices.input, "\(row.key): output should cost more than input")
+            XCTAssertGreaterThanOrEqual(row.prices.cacheWrite, row.prices.input, "\(row.key): a cache write is at least an input token")
+            XCTAssertLessThan(row.prices.cacheRead, row.prices.input, "\(row.key): a cache read is the discount")
+        }
+    }
+
     func testModelIdNormalization() {
         XCTAssertEqual(ModelPricing.normalize("anthropic/claude-opus-4.8:batch"), "claude-opus-4.8")
         XCTAssertEqual(ModelPricing.normalize("claude-opus-4-8"), "claude-opus-4.8")

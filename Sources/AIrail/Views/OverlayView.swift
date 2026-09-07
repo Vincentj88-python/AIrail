@@ -39,8 +39,12 @@ struct OverlayView: View {
                     UsageBreakdown(detail: detail, color: info.color)
                 }
                 ActivityLine(week: detail.week, tools: detail.topTools)
-                if let value = ModelPricing.estimate(detail.week) {
-                    valueLine(value, plan: snapshot?.plan)
+                // Only a live account with nothing priced in dollars already:
+                // a demo profile has nothing to value, and a reported spend
+                // or Cursor's per-request cents beat an estimate of the same.
+                if let snapshot, snapshot.status != .demo, snapshot.spend == nil, detail.week.cost == 0,
+                   let value = ModelPricing.estimate(detail.week) {
+                    valueLine(value, plan: snapshot.plan)
                 }
             }
             if snapshot?.credits != nil || snapshot?.spend != nil {

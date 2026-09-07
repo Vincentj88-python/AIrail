@@ -58,7 +58,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !LaunchOptions.isRunningTests {
             providerManager.start()
             UpdateChecker.checkInBackgroundIfDue()
-            ModelPricing.refreshIfDue()
         }
 
         if let providerId = LaunchOptions.overlayProviderId {

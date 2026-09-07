@@ -62,6 +62,33 @@ Things established that reverse or extend earlier notes:
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
 
+## Simplify: static price table (2026-09-06)
+
+- **What was wrong:** `ModelPricing` fetched openrouter.ai's model catalogue
+  weekly for every user at every launch — a network call README's "only
+  network traffic is each connected tool's own usage check" line never
+  disclosed — cached it in UserDefaults, and the demo card priced its made-up
+  tokens in real dollars. The lookup also matched prefixes both ways, so a
+  bare "gemini-3-pro" took the longest sibling's price; and the unit test
+  "used the offline table" while actually reading the host app's live cache.
+- **Fix:** the fetch, both cache keys and the `@MainActor` global are gone;
+  `ModelPricing.table` is a shipped ~22-row table keyed by normalized id
+  fragments ("opus-4.1", "opus", "gpt-5.2", "gpt-5", "gemini", …) matched at
+  "-"/"."/end boundaries, longest key wins — a version with its own price
+  beats its family row, Cursor's "cursor-grok-…" ids match mid-string, and
+  "gpt" never fits "chatgpt-4o-latest". `estimate` prices the week's
+  input/output/cache mix per model, each weighted by its share of the week's
+  tokens (was: the dominant model's rate for everything); `TokenPrices.cost(of:)`
+  is the reusable half for cost-by-model. The HUD shows the line only for a
+  non-demo snapshot with `spend == nil` and `week.cost == 0` — a reported spend
+  or Cursor's per-request cents beat an estimate of the same thing.
+- **By hand, Vincent:** the prices are from memory as of 2026-09-06 and could
+  not be checked against the vendors from here; check `ModelPricing.table`
+  before cutting v0.3.0 (now a line in README › Releasing and the go-public
+  checklist). The v0.2.0 install left `modelPricesCache`/`modelPricesCacheDate`
+  in `defaults` for `com.codeandvin.airail`; harmless, delete if you like.
+- 57 tests green (+2): apportioning, most-specific-row matching, table sanity.
+
 ## Single-flight, testable refresh (2026-09-06)
 
 - **What was wrong:** `ProviderManager.refresh` had no in-flight guard, so
@@ -170,7 +197,8 @@ Things established that reverse or extend earlier notes:
       OpenAI API) against real API keys — parsers are fixture-tested only.
 - [ ] **Gemini** provider — find a dependable quota read.
 - [ ] Go-public checklist: Apple Developer ID → notarize → Sparkle → repo
-      public → publish `v0.2.0` (or cut `v0.3.0`).
+      public → publish `v0.2.0` (or cut `v0.3.0`). Every release: check
+      `ModelPricing.table` against the vendors' price pages.
 - [ ] Optional niceties floated but not built: a shareable "week in AI" recap
       card; per-account history for Copilot (no local feed).
 

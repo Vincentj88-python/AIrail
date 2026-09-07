@@ -111,7 +111,9 @@ AIrail checks for updates itself: **right-click the rail → Check for Updates�
 To publish a new version:
 
 ```
-# bump MARKETING_VERSION in the app target, commit, then:
+# check ModelPricing.table against the vendors' price pages (the API-value
+# estimate ships as a table, nothing is fetched), bump MARKETING_VERSION in
+# the app target, commit, then:
 git tag v0.2.1 && git push origin v0.2.1
 ./scripts/release.sh                       # builds dist/AIrail-0.2.1.dmg
 gh release create v0.2.1 dist/AIrail-0.2.1.dmg --title "v0.2.1" --notes "…"
