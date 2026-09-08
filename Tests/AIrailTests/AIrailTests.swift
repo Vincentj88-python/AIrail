@@ -212,6 +212,61 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(AppSettings(defaults: defaults).position, .left, "an unknown value falls back to the left edge")
     }
 
+    @MainActor
+    func testRailAutoHidesRoundTrip() {
+        let suite = "AIrailTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let settings = AppSettings(defaults: defaults)
+        XCTAssertTrue(settings.railAutoHides, "the rail hides by default")
+        XCTAssertFalse(settings.railIsPinned)
+
+        settings.railAutoHides = false
+        XCTAssertTrue(settings.railIsPinned)
+        settings.position = .top
+        XCTAssertFalse(settings.railIsPinned, "Top always hides; the island shows on hover")
+        settings.position = .right
+        XCTAssertTrue(settings.railIsPinned)
+
+        let reloaded = AppSettings(defaults: defaults)
+        XCTAssertFalse(reloaded.railAutoHides)
+        XCTAssertTrue(reloaded.railIsPinned)
+    }
+
+    @MainActor
+    func testPinnedRailOpensAndNeverCollapses() async {
+        let suite = "AIrailTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let settings = AppSettings(defaults: defaults)
+        settings.autoHideDelay = 0
+        settings.railAutoHides = false
+        let ui = RailUIState()
+        let controller = RailWindowController(settings: settings, manager: ProviderManager(settings: settings), ui: ui)
+
+        controller.applyAutoHide()
+        XCTAssertTrue(ui.isExpanded, "pinned opens the rail")
+
+        // The pointer leaving the rail must not tuck it away.
+        controller.scheduleCollapse()
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertTrue(ui.isExpanded, "a pinned rail ignores the collapse timer")
+
+        // Unpinned, the same timer collapses it.
+        settings.railAutoHides = true
+        controller.scheduleCollapse()
+        let deadline = Date().addingTimeInterval(2)
+        while ui.isExpanded, Date() < deadline { await Task.yield() }
+        XCTAssertFalse(ui.isExpanded, "auto-hide on: the rail tucks away after the delay")
+
+        // Pinning again reopens it.
+        settings.railAutoHides = false
+        controller.applyAutoHide()
+        XCTAssertTrue(ui.isExpanded)
+    }
+
     func testVirtualNotchSitsInTheMenuBarCentre() {
         let ultrawide = NSRect(x: 0, y: 0, width: 3440, height: 1440)
         let pill = NotchGeometry.virtualRect(in: ultrawide, menuBarHeight: 30)

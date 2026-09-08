@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Settings › Rail › Automatically hide the rail.** Off, the edge rail stays open as the stack of marks and rings all day, Dock-style, floating over your windows rather than reserving space. Left and Right only; Top keeps its hover island.
+
 ## 0.3.0
 
 The honest-numbers release: everything the card and the rail show is either a real read or labelled as an estimate, the surfaces cost nothing to keep on screen, and a Privacy pane lists exactly what AIrail touches.

@@ -31,6 +31,7 @@ final class AppSettings: ObservableObject {
         static let railPosition = "railPosition"
         static let railDisplay = "railDisplay"
         static let autoHideDelay = "autoHideDelay"
+        static let railAutoHides = "railAutoHides"
         static let refreshInterval = "refreshInterval"
         static let connectedAccounts = "connectedAccounts"
         static let hiddenFromRail = "hiddenFromRail"
@@ -57,6 +58,16 @@ final class AppSettings: ObservableObject {
     }
     @Published var autoHideDelay: Double {
         didSet { defaults.set(autoHideDelay, forKey: Key.autoHideDelay) }
+    }
+    /// Dock-style "Automatically hide the rail". Off, the edge rail stays
+    /// open as the stack of marks and never tucks back into the hairline.
+    /// Top ignores it: a permanent island under the notch would be odd.
+    @Published var railAutoHides: Bool {
+        didSet { defaults.set(railAutoHides, forKey: Key.railAutoHides) }
+    }
+    /// True when the edge rail should sit open all day.
+    var railIsPinned: Bool {
+        !railAutoHides && !position.isTop
     }
     @Published var refreshInterval: Double {
         didSet { defaults.set(refreshInterval, forKey: Key.refreshInterval) }
@@ -88,6 +99,7 @@ final class AppSettings: ObservableObject {
         }
         railDisplay = defaults.string(forKey: Key.railDisplay) ?? ScreenSelection.automatic
         autoHideDelay = defaults.object(forKey: Key.autoHideDelay) as? Double ?? 0.3
+        railAutoHides = defaults.object(forKey: Key.railAutoHides) as? Bool ?? true
         refreshInterval = defaults.object(forKey: Key.refreshInterval) as? Double ?? 60
         // Off until asked for: the permission prompt comes with the toggle.
         notificationsEnabled = defaults.object(forKey: Key.notifications) as? Bool ?? false

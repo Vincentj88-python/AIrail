@@ -162,6 +162,16 @@ private struct RailPane: View {
         return "This edge of \(screen.localizedName) continues onto \(neighbour.localizedName), so the pointer will cross over rather than rest on the rail. Pick the other side, or the display at the outer edge."
     }
 
+    private var autoHideFooter: String {
+        if settings.position.isTop {
+            return "Top always hides: the island shows on hover and tucks back under the notch."
+        }
+        if settings.railAutoHides {
+            return "How long the expanded rail stays open after the pointer leaves it."
+        }
+        return "The rail stays open on the edge of the display. It floats over your windows rather than reserving space, the way a pinned Dock would."
+    }
+
     var body: some View {
         Form {
             Section {
@@ -194,6 +204,8 @@ private struct RailPane: View {
                 }
             }
             Section {
+                Toggle("Automatically hide the rail", isOn: $settings.railAutoHides)
+                    .disabled(settings.position.isTop)
                 HStack {
                     Slider(value: $settings.autoHideDelay, in: 0...2, step: 0.1) {
                         Text("Auto-hide delay")
@@ -203,11 +215,12 @@ private struct RailPane: View {
                         .foregroundStyle(.secondary)
                         .frame(width: 38, alignment: .trailing)
                 }
+                .disabled(!settings.railAutoHides || settings.position.isTop)
             } footer: {
-                Text("How long the expanded rail stays open after the pointer leaves it.")
+                Text(autoHideFooter)
             }
         }
         .formStyle(.grouped)
-        .frame(height: 360)
+        .frame(height: 400)
     }
 }

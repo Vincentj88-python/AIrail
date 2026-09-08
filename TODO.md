@@ -1,6 +1,6 @@
 # AIrail — TODO / where we left off
 
-_Last updated: 2026-09-07. **v0.2.0 is feature-complete and all pushed** to the
+_Last updated: 2026-09-08. **v0.2.0 is feature-complete and all pushed** to the
 (now private) GitHub repo; running from `/Applications` on this Mac. Below is
 where we left off; the dated sections further down are the running log of how
 each piece was built and why._
@@ -95,6 +95,33 @@ Things established that reverse or extend earlier notes:
 - **v0.3.0 launch scope (my pick):** tier 1 blocks A + B + E plus the first
   three block C items (hairline-only island, Core Animation hairline, ambient
   headroom). v0.2.1 = the hardened-runtime fix alone, or hold it for v0.3.0.
+
+## Always-shown rail (2026-09-08)
+
+Vincent asked for an option to keep the expanded rail (marks, rings, names,
+percents) on screen all day. This is the first half of the roadmap's
+`always-shown-compact-rail` item, done as the smallest honest version: the
+pinned rail is exactly the hover card, not the narrower compact column.
+
+- **Setting:** `AppSettings.railAutoHides` (default true, key
+  `railAutoHides`) and a derived `railIsPinned` that is false for Top, so
+  the island never sits open under the notch.
+- **Controller:** `RailWindowController.show()` expands when pinned;
+  `scheduleCollapse()` returns early when pinned (which also covers
+  `scheduleCollapseIfIdle()` from the overlay's close); `applyAutoHide()`
+  expands or collapses-if-idle when the toggle flips, driven by one
+  `settings.$railAutoHides` sink in `AppDelegate`. Position changes need no
+  extra wiring: `applyPosition()` already calls `show()`.
+- **Settings › Rail:** a Dock-style "Automatically hide the rail" Toggle
+  above the delay Slider; the Slider is greyed while off; both are greyed on
+  Top, and the footer says why. Pane height 360 → 400.
+- **Tests:** `testRailAutoHidesRoundTrip` and
+  `testPinnedRailOpensAndNeverCollapses` (drives the real controller with a
+  zero delay).
+- **Known limits, by design:** the pinned rail floats over windows rather
+  than reserving space, and sits over full-screen apps until the Dock
+  etiquette item lands. The compact 64 pt column, `RailMetrics` and the
+  accent edge stroke are the rest of the roadmap item.
 
 ## Honest README, capture flags and launch prep (2026-09-07)
 

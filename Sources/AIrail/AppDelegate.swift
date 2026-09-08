@@ -91,6 +91,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         .store(in: &cancellables)
 
+        settings.$railAutoHides.dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.railController?.applyAutoHide()
+            }
+            .store(in: &cancellables)
+
         // Rail membership follows the connected accounts and their show-on-rail toggles.
         Publishers.Merge(
             settings.$connectedAccountIds.dropFirst().map { _ in () },

@@ -194,6 +194,7 @@ Five ordered blocks; each lands before the next touches the same files. v0.2.1 =
   A Dock-style 'Automatically hide the rail' toggle; off, the rail stays open as a narrow column of rings.
   - How: AppSettings.railAutoHides (default true); RailPane puts the Toggle in the auto-hide Section with the delay Slider disabled when off, Left/Right only, footer saying it floats over windows rather than reserving space. RailWindowController moves the 108/10/44+5+31 literals into a unit-tested RailMetrics enum; frame(expanded:) treats !railAutoHides as expanded at width 64 with cell 44+3+13; show() expands and scheduleCollapse returns early when pinned; applyAutoHide() driven by one settings sink in AppDelegate. logoButton drops the name line when pinned, keeps the percent (dimmed when stale); shadow radius 8; carry railAccent into the pinned card's 1 pt edge stroke.
   - Why here: Block C: the state machine already supports it via isExpanded held true, and RailMetrics is the extraction three other items wanted. Not offered for Notch/Island. Full-screen behaviour comes with the tier-2 menu-bar-hide watcher.
+  - Landed 2026-09-08, first half: `AppSettings.railAutoHides` + `railIsPinned`, the Toggle with the delay Slider disabled, `RailWindowController.applyAutoHide()` from one settings sink, pinned keeps the full 108 pt card with names. Still open: the 64 pt compact column without the name line, `RailMetrics`, the accent edge stroke.
 
 
 ### Block D — Reach (5 items, ≈ 9 days)

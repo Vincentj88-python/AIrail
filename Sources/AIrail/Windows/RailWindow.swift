@@ -86,6 +86,9 @@ final class RailWindowController {
 
     func show() {
         panel.orderFrontRegardless()
+        if settings.railIsPinned {
+            expand()
+        }
     }
 
     func hide() {
@@ -104,6 +107,7 @@ final class RailWindowController {
 
     func scheduleCollapse() {
         collapseTask?.cancel()
+        guard !settings.railIsPinned else { return }
         let delay = max(0, settings.autoHideDelay)
         collapseTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
@@ -116,6 +120,16 @@ final class RailWindowController {
     func scheduleCollapseIfIdle() {
         if !panel.frame.contains(NSEvent.mouseLocation) {
             scheduleCollapse()
+        }
+    }
+
+    /// The auto-hide setting changed: pinned opens the rail and keeps it;
+    /// unpinned lets it tuck away unless the pointer or the card is holding it.
+    func applyAutoHide() {
+        if settings.railIsPinned {
+            expand()
+        } else {
+            scheduleCollapseIfIdle()
         }
     }
 
