@@ -122,6 +122,8 @@ pinned rail is exactly the hover card, not the narrower compact column.
   than reserving space, and sits over full-screen apps until the Dock
   etiquette item lands. The compact 64 pt column, `RailMetrics` and the
   accent edge stroke are the rest of the roadmap item.
+- **Shipped as v0.3.1** (2026-09-08), cut so the update checker can be tested
+  end-to-end from the 0.3.0 install in /Applications.
 
 ## Honest README, capture flags and launch prep (2026-09-07)
 

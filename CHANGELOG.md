@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.1
+
+A small release: one setting, and the first update the in-app checker has had to announce.
 
 - **Settings › Rail › Automatically hide the rail.** Off, the edge rail stays open as the stack of marks and rings all day, Dock-style, floating over your windows rather than reserving space. Left and Right only; Top keeps its hover island.
 
