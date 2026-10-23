@@ -246,7 +246,7 @@ private struct AccountDetailView: View {
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
             HStack {
-                Button("Refresh") {
+                Button(error?.needsConsent == true ? "Allow…" : "Refresh") {
                     Task { await manager.refresh(info.id, force: true) }
                 }
                 .disabled(manager.refreshingIds.contains(info.id))

@@ -3,21 +3,26 @@ import Security
 
 /// Read-only access to a generic-password item another tool created. macOS
 /// puts up its own "AIrail wants to use your confidential information…"
-/// dialog on first read; that dialog is the consent step, deliberately.
+/// dialog when the item doesn't trust AIrail yet. That dialog is the consent
+/// step, so it only ever appears after a click: background reads pass
+/// `interactive: false` and fail instead of asking.
 enum KeychainReader {
     /// Reads the item, retrying a few times before giving up: right after login
     /// the login Keychain can still be unlocking, and a tool rotating its own
     /// credential (Claude Code does, periodically) can make a read momentarily
     /// fail with a decode/"invalid record" error that clears on the next try.
-    static func genericPassword(service: String, tool: String) throws -> Data {
+    static func genericPassword(service: String, tool: String, interactive: Bool = true) throws -> Data {
         var lastStatus: OSStatus = errSecSuccess
         for attempt in 0..<3 {
-            let query: [String: Any] = [
+            var query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: service,
                 kSecReturnData as String: true,
                 kSecMatchLimit as String: kSecMatchLimitOne,
             ]
+            if !interactive {
+                query.merge(noUI) { _, new in new }
+            }
             var item: CFTypeRef?
             let status = SecItemCopyMatching(query as CFDictionary, &item)
             switch status {
@@ -29,6 +34,11 @@ enum KeychainReader {
                 return data
             case errSecItemNotFound:
                 throw ConnectionError.notSignedIn(tool: tool)
+            case errSecInteractionNotAllowed where !interactive:
+                // The item doesn't trust AIrail (any more): reading it would
+                // put up the dialog, which waits for the user's click.
+                Log.keychain.notice("\(tool, privacy: .public): needs consent")
+                throw ConnectionError.needsConsent(tool: tool)
             case errSecAuthFailed, errSecUserCanceled, errSecInteractionNotAllowed:
                 // Prompt-related: don't hammer the dialog, let the caller retry later.
                 Log.keychain.notice("\(tool, privacy: .public): access not allowed (\(status, privacy: .public))")
@@ -46,20 +56,11 @@ enum KeychainReader {
         throw ConnectionError.temporarilyUnavailable(tool: tool)
     }
 
-    /// Reads whichever of several candidate items exists — the most recently
-    /// modified when more than one does — and says which it was. Only the
-    /// one data read can prompt; the probe never does.
-    static func genericPassword(services: [String], tool: String) throws -> (service: String, data: Data) {
-        guard let service = existingServices(services).first else {
-            throw ConnectionError.notSignedIn(tool: tool)
-        }
-        return (service, try genericPassword(service: service, tool: tool))
-    }
-
-    /// Which of the candidate items exist, newest modification first. An
-    /// attributes-only query is answered without the consent dialog, so this
-    /// costs nothing to ask for names that turn out not to be there.
-    static func existingServices(_ services: [String]) -> [String] {
+    /// Which of the candidate items exists — the most recently modified when
+    /// more than one does — and when it last changed. An attributes-only
+    /// query is answered without the consent dialog, so this costs nothing
+    /// and tells a renewed sign-in from one AIrail has already read.
+    static func newestItem(_ services: [String]) -> (service: String, modified: Date)? {
         var found: [(service: String, modified: Date)] = []
         for service in services {
             let query: [String: Any] = [
@@ -73,6 +74,15 @@ enum KeychainReader {
             let modified = (item as? [String: Any])?[kSecAttrModificationDate as String] as? Date ?? .distantPast
             found.append((service, modified))
         }
-        return found.sorted { $0.modified > $1.modified }.map(\.service)
+        return found.max { $0.modified < $1.modified }
+    }
+
+    /// Query keys that make a read fail with errSecInteractionNotAllowed
+    /// rather than show the dialog. Apple's replacement (an LAContext with
+    /// interactionNotAllowed) covers data-protection items, not the legacy
+    /// login keychain where the tools keep their sign-ins, so this stays on
+    /// the older constant knowingly.
+    static var noUI: [String: Any] {
+        [kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail]
     }
 }

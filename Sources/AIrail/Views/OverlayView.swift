@@ -153,6 +153,14 @@ struct OverlayView: View {
                         Text("The \(snapshot.expiredWindowLabel ?? "usage") window reset \(UsageFormatting.weekdayTime(reset)) — nothing has been read since.")
                             .foregroundStyle(.secondary)
                     }
+                    if error.needsConsent {
+                        // The one place a Keychain dialog may come from: this click.
+                        Button("Allow…") {
+                            Task { await manager.refresh(info.id, force: true) }
+                        }
+                        .buttonStyle(.link)
+                        .disabled(manager.refreshingIds.contains(info.id))
+                    }
                     if error.isShapeChange {
                         Button(UpdateChecker.menuTitle(for: ui.availableUpdate)) {
                             if let release = ui.availableUpdate {

@@ -13,8 +13,8 @@ final class ClaudeProvider: UsageProviding {
     let connection = ConnectionMethod(
         toolName: "Claude Code",
         summary: "Uses your Claude Code sign-in",
-        explainer: "AIrail reads the sign-in Claude Code keeps in your Keychain and asks Anthropic for your plan's current 5-hour and weekly limits — the same numbers Claude Code's /usage shows. Your local session transcripts in ~/.claude provide the 24-hour and 7-day charts, the by-model and by-project breakdown, and the tool counts. Nothing is written back, and the refresh token is never used.",
-        caveat: "macOS asks before AIrail can read the Keychain item. Choose “Always Allow” so it stops asking; it may ask again after Claude Code renews its sign-in. If Claude Code runs with CLAUDE_CONFIG_DIR pointing somewhere other than ~/.claude, AIrail can't see that shell setting and may not find the item."
+        explainer: "AIrail reads the sign-in Claude Code keeps in your Keychain (or in ~/.claude/.credentials.json) and asks Anthropic for your plan's current 5-hour and weekly limits — the same numbers Claude Code's /usage shows. Your local session transcripts in ~/.claude provide the 24-hour and 7-day charts, the by-model and by-project breakdown, and the tool counts. AIrail keeps a copy of the access token in its own Keychain item until it expires, so a relaunch doesn't ask again. Nothing is written back, and the refresh token is never used.",
+        caveat: "macOS asks once when you connect. When Claude Code renews its sign-in it replaces its Keychain item, and macOS forgets “Always Allow”; AIrail then shows an Allow button instead of asking in the background. If Claude Code runs with CLAUDE_CONFIG_DIR pointing somewhere other than ~/.claude, AIrail can't see that shell setting and may not find the item."
     )
 
     let demoProfile = MockUsageEngine.Profile(
@@ -23,11 +23,18 @@ final class ClaudeProvider: UsageProviding {
         demoModels: ["claude-opus-5", "claude-sonnet-5"]
     )
 
-    /// The Keychain item the sign-in was last found under; nil until the first read.
-    private var keychainService: String?
     static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+    /// AIrail's own Keychain item holding its copy of the access token.
+    static let cacheAccount = "claude-code-sign-in"
 
-    private var credential: ClaudeUsage.Credential?
+    /// The token in use and where it came from; restored from AIrail's own
+    /// Keychain item on the first read after launch.
+    private var signIn: ClaudeUsage.SignIn?
+    private var restoredSignIn = false
+    /// A renewed sign-in a background read already found waiting for the
+    /// user's OK. Background reads leave it alone until a click, so a dialog
+    /// is never raised (or retried) on the timer.
+    private var awaitingConsent: (service: String, modified: Date)?
     private let scanner = TranscriptScanner(
         roots: [URL(fileURLWithPath: NSHomeDirectory() + "/.claude/projects")],
         requiredSubstrings: ["\"assistant\""],
@@ -39,7 +46,11 @@ final class ClaudeProvider: UsageProviding {
     }
 
     func fetchUsage() async throws -> UsageSnapshot {
-        let credential = try await loadCredential()
+        try await fetchUsage(interactive: false)
+    }
+
+    func fetchUsage(interactive: Bool) async throws -> UsageSnapshot {
+        let credential = try await loadCredential(interactive: interactive)
         let data: Data
         do {
             data = try await HTTPClient.authorizedGet(
@@ -52,7 +63,13 @@ final class ClaudeProvider: UsageProviding {
                 tool: connection.toolName
             )
         } catch ConnectionError.expired(let tool) {
-            self.credential = nil // Claude Code may have renewed it; re-read next time
+            // Rejected before its stated expiry: Claude Code renewed or signed
+            // out. Keep where it came from, so the next read knows whether
+            // there is anything newer to read.
+            if var rejected = signIn {
+                rejected.credential.expiresAt = .distantPast
+                keep(rejected)
+            }
             throw ConnectionError.expired(tool: tool)
         }
         let report = try ClaudeUsage.parse(data)
@@ -63,42 +80,137 @@ final class ClaudeProvider: UsageProviding {
         )
     }
 
-    /// The Keychain read is the consent moment (macOS prompts), so the token is
-    /// kept in memory and only re-read once it has expired. The read happens
-    /// off the main thread so the rail keeps animating while the prompt is up.
-    private func loadCredential() async throws -> ClaudeUsage.Credential {
-        if let credential, let expiresAt = credential.expiresAt, expiresAt > Date().addingTimeInterval(60) {
-            return credential
-        }
+    func forgetBorrowedSignIn() {
+        signIn = nil
+        awaitingConsent = nil
+        KeychainStore.delete(account: Self.cacheAccount)
+    }
+
+    /// Where the token comes from, cheapest first, and none of it can put up
+    /// a dialog unless `interactive` (the user clicked Connect, Allow or
+    /// Refresh):
+    /// 1. the token already in hand, or AIrail's own copy from an earlier launch;
+    /// 2. `~/.claude/.credentials.json`, when Claude Code keeps one;
+    /// 3. Claude Code's Keychain item, read only when it has changed since
+    ///    AIrail last read it — an unchanged item holds the token that just
+    ///    expired, so the answer is "open Claude Code", not a dialog.
+    private func loadCredential(interactive: Bool) async throws -> ClaudeUsage.Credential {
         let tool = connection.toolName
-        let known = keychainService
-        let candidates = ClaudeUsage.keychainServices()
-        let (service, data) = try await Task.detached { () throws -> (String, Data) in
-            if let known {
-                do {
-                    return (known, try KeychainReader.genericPassword(service: known, tool: tool))
-                } catch ConnectionError.notSignedIn {
-                    // Renamed or removed since: look at every candidate again.
-                }
-            }
-            return try KeychainReader.genericPassword(services: candidates, tool: tool)
-        }.value
-        keychainService = service
-        let fresh = try ClaudeUsage.credential(from: data)
-        if let expiresAt = fresh.expiresAt, expiresAt < Date() {
-            throw ConnectionError.expired(tool: connection.toolName)
+        let now = Date()
+        if !restoredSignIn {
+            restoredSignIn = true
+            let account = Self.cacheAccount
+            let saved = await Task.detached { KeychainStore.quietData(account: account) }.value
+            signIn = saved.flatMap { try? JSONDecoder().decode(ClaudeUsage.SignIn.self, from: $0) }
         }
-        credential = fresh
+        if let signIn, signIn.credential.isUsable(at: now) {
+            return signIn.credential
+        }
+
+        let files = ClaudeUsage.credentialFiles()
+        let fromFile = await Task.detached { ClaudeUsage.credential(fromFirstOf: files) }.value
+        if let fromFile, fromFile.isUsable(at: now) {
+            keep(ClaudeUsage.SignIn(credential: fromFile))
+            return fromFile
+        }
+
+        let candidates = ClaudeUsage.keychainServices()
+        guard let newest = await Task.detached(operation: { KeychainReader.newestItem(candidates) }).value else {
+            if fromFile != nil { throw ConnectionError.expired(tool: tool) }
+            throw ConnectionError.notSignedIn(tool: tool)
+        }
+        if let signIn, signIn.isFrom(service: newest.service, modified: newest.modified) {
+            throw ConnectionError.expired(tool: tool)
+        }
+        if !interactive, let waiting = awaitingConsent,
+           waiting.service == newest.service, abs(waiting.modified.timeIntervalSince(newest.modified)) < 1 {
+            throw ConnectionError.needsConsent(tool: tool)
+        }
+        let data: Data
+        do {
+            data = try await Task.detached {
+                try KeychainReader.genericPassword(service: newest.service, tool: tool, interactive: interactive)
+            }.value
+        } catch let failure as ConnectionError {
+            switch failure {
+            case .needsConsent, .accessDenied:
+                // Declined or not asked: either way the timer leaves this
+                // version alone until the user clicks Allow.
+                awaitingConsent = newest
+                throw interactive ? failure : ConnectionError.needsConsent(tool: tool)
+            default:
+                throw failure
+            }
+        }
+        awaitingConsent = nil
+        let fresh = try ClaudeUsage.credential(from: data)
+        keep(ClaudeUsage.SignIn(credential: fresh, service: newest.service, sourceModified: newest.modified))
+        guard fresh.isUsable(at: now) else { throw ConnectionError.expired(tool: tool) }
         return fresh
+    }
+
+    /// Holds the token in memory and in AIrail's own Keychain item, written
+    /// off the main thread and never with a dialog.
+    private func keep(_ signIn: ClaudeUsage.SignIn) {
+        self.signIn = signIn
+        guard let data = try? JSONEncoder().encode(signIn) else { return }
+        let account = Self.cacheAccount
+        Task.detached {
+            KeychainStore.quietSet(data, account: account, label: "AIrail — Claude Code sign-in (copy)")
+        }
     }
 }
 
 /// Pure parsing for the Claude provider, kept separate so fixtures can test it.
 enum ClaudeUsage {
-    struct Credential: Sendable {
+    struct Credential: Codable, Sendable {
         let accessToken: String
-        let expiresAt: Date?
+        var expiresAt: Date?
         let plan: String?
+
+        /// Good for at least another minute. A token without an expiry is
+        /// used until the server turns it away.
+        func isUsable(at now: Date) -> Bool {
+            expiresAt.map { $0 > now.addingTimeInterval(60) } ?? true
+        }
+    }
+
+    /// AIrail's copy of the sign-in, and the Keychain item and version it was
+    /// read from (nil service: the credentials file), kept in AIrail's own
+    /// Keychain item between launches.
+    struct SignIn: Codable, Sendable {
+        var credential: Credential
+        var service: String?
+        var sourceModified: Date?
+
+        /// True when Claude Code's item hasn't changed since this was read from it.
+        func isFrom(service: String, modified: Date) -> Bool {
+            guard self.service == service, let sourceModified else { return false }
+            return abs(sourceModified.timeIntervalSince(modified)) < 1
+        }
+    }
+
+    /// Where Claude Code keeps its sign-in as a file instead of in the
+    /// Keychain (some installs, and any machine where the Keychain failed it).
+    static func credentialFiles(
+        home: String = NSHomeDirectory(),
+        configDir: String? = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]
+    ) -> [String] {
+        var folders = [home + "/.claude"]
+        if let configDir, !configDir.isEmpty, !folders.contains(configDir) { folders.insert(configDir, at: 0) }
+        return folders.map { $0 + "/.credentials.json" }
+    }
+
+    /// The first of those files that exists and holds a sign-in. Reading a
+    /// file never involves macOS's Keychain dialog.
+    static func credential(fromFirstOf paths: [String]) -> Credential? {
+        for path in paths {
+            guard let data = FileManager.default.contents(atPath: path),
+                  let found = try? Self.credential(from: data)
+            else { continue }
+            return found
+        }
+        return nil
     }
 
     struct Report: Sendable {

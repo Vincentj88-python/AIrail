@@ -71,7 +71,9 @@ enum Footprint {
         switch providerId {
         case "claude":
             return [
-                .keychain(item: "Claude Code-credentials", what: "the sign-in Claude Code keeps"),
+                .keychain(item: "Claude Code-credentials", what: "the sign-in Claude Code keeps, read only after you click"),
+                .file(path: "~/.claude/.credentials.json", what: "the same sign-in, when Claude Code keeps it as a file"),
+                .keychain(item: "AIrail", what: "AIrail's copy of the access token, until it expires"),
                 .file(path: "~/.claude/projects", what: "session transcripts, for the charts"),
                 .host("api.anthropic.com", what: "your plan's session and weekly limits"),
             ]

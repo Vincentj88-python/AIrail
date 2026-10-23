@@ -469,8 +469,8 @@ final class AIrailTests: XCTestCase {
         )
         // Names that don't exist are answered without a prompt and without a read.
         let absent = ["AIrail-no-such-item-\(UUID().uuidString)"]
-        XCTAssertTrue(KeychainReader.existingServices(absent).isEmpty)
-        XCTAssertThrowsError(try KeychainReader.genericPassword(services: absent, tool: "Test")) { error in
+        XCTAssertNil(KeychainReader.newestItem(absent))
+        XCTAssertThrowsError(try KeychainReader.genericPassword(service: absent[0], tool: "Test", interactive: false)) { error in
             XCTAssertEqual((error as? ConnectionError)?.shortDescription, "Test not signed in")
         }
     }
@@ -483,6 +483,58 @@ final class AIrailTests: XCTestCase {
         XCTAssertEqual(credential.expiresAt!.timeIntervalSince1970, 1_788_330_749.016, accuracy: 0.001)
 
         XCTAssertThrowsError(try ClaudeUsage.credential(from: Data(#"{"other":{}}"#.utf8)))
+    }
+
+    /// AIrail's copy of the token says which Keychain item and version it
+    /// came from, so an expired token over an unchanged item reads as
+    /// "open Claude Code" with no Keychain read, and the version survives
+    /// the round trip through AIrail's own item exactly.
+    func testClaudeSignInKnowsWhetherAnythingNewerIsWaiting() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let modified = Date(timeIntervalSinceReferenceDate: 812_345_678.123456)
+        let credential = ClaudeUsage.Credential(accessToken: "t", expiresAt: now.addingTimeInterval(3600), plan: "Max")
+        let signIn = ClaudeUsage.SignIn(credential: credential, service: "Claude Code-credentials", sourceModified: modified)
+
+        XCTAssertTrue(credential.isUsable(at: now))
+        XCTAssertFalse(credential.isUsable(at: now.addingTimeInterval(3570)), "a token about to expire isn't used")
+        XCTAssertTrue(ClaudeUsage.Credential(accessToken: "t", expiresAt: nil, plan: nil).isUsable(at: now),
+                      "no stated expiry: used until the server turns it away")
+
+        let restored = try JSONDecoder().decode(ClaudeUsage.SignIn.self, from: JSONEncoder().encode(signIn))
+        XCTAssertEqual(restored.credential.accessToken, "t")
+        XCTAssertTrue(restored.isFrom(service: "Claude Code-credentials", modified: modified))
+        XCTAssertFalse(restored.isFrom(service: "Claude Code-credentials", modified: modified.addingTimeInterval(5)),
+                       "Claude Code renewed it: worth reading")
+        XCTAssertFalse(restored.isFrom(service: "Claude Code-credentials-88404443", modified: modified))
+        XCTAssertFalse(ClaudeUsage.SignIn(credential: credential).isFrom(service: "Claude Code-credentials", modified: modified),
+                       "a token from the file says nothing about the Keychain item")
+    }
+
+    func testClaudeCredentialsFileIsReadWithoutTheKeychain() throws {
+        XCTAssertEqual(ClaudeUsage.credentialFiles(home: "/Users/v", configDir: nil), ["/Users/v/.claude/.credentials.json"])
+        XCTAssertEqual(
+            ClaudeUsage.credentialFiles(home: "/Users/v", configDir: "/tmp/cc"),
+            ["/tmp/cc/.credentials.json", "/Users/v/.claude/.credentials.json"]
+        )
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent(".credentials.json")
+        try Data(#"{"claudeAiOauth":{"accessToken":"from-file","expiresAt":1788330749016,"subscriptionType":"pro"}}"#.utf8).write(to: file)
+        let found = ClaudeUsage.credential(fromFirstOf: [folder.path + "/missing.json", file.path])
+        XCTAssertEqual(found?.accessToken, "from-file")
+        XCTAssertEqual(found?.plan, "Pro")
+        XCTAssertNil(ClaudeUsage.credential(fromFirstOf: [folder.path + "/missing.json"]))
+    }
+
+    func testConsentErrorKeepsTheNumbersAndWaitsForAClick() {
+        let err = ConnectionError.needsConsent(tool: "Claude Code")
+        XCTAssertTrue(err.isTransient, "a renewed sign-in keeps the last real numbers")
+        XCTAssertTrue(err.needsConsent)
+        XCTAssertTrue(ConnectionError.accessDenied(tool: "Claude Code").needsConsent, "a declined dialog offers Allow again")
+        XCTAssertFalse(ConnectionError.expired(tool: "Claude Code").needsConsent)
+        XCTAssertEqual(err.symbolName, "hand.raised")
+        XCTAssertTrue(err.errorDescription?.contains("never asks in the background") == true)
     }
 
     func testClaudeUsageParse() throws {

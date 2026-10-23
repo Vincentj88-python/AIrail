@@ -1,0 +1,28 @@
+# Build and run the unit tests on every push and pull request, ad-hoc signed
+# so no identity is needed. Live provider tests skip themselves (AIRAIL_LIVE
+# is unset), so nothing here touches a real sign-in or endpoint.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    # macos-15 carries Xcode 16 (Swift 6); macos-14 stopped at Xcode 15.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project AIrail.xcodeproj \
+            -scheme AIrail \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" \
+            | tee xcodebuild.log | grep -E "error:|warning:|Test Case .* failed|Executed|\*\* (BUILD|TEST)"

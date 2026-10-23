@@ -25,6 +25,10 @@ enum ConnectionError: LocalizedError, Sendable {
     case notInstalled(tool: String)
     case notSignedIn(tool: String)
     case accessDenied(tool: String)
+    /// The tool renewed its sign-in and the new Keychain item doesn't trust
+    /// AIrail yet. Reading it would put up the macOS dialog, which only ever
+    /// happens after the user clicks Allow — never from a background refresh.
+    case needsConsent(tool: String)
     case expired(tool: String)
     case missingKey(platform: String)
     case invalidKey(platform: String, hint: String?)
@@ -53,6 +57,8 @@ enum ConnectionError: LocalizedError, Sendable {
             return "\(tool) isn't signed in. Sign in there first, then try again."
         case .accessDenied(let tool):
             return "macOS didn't allow AIrail to read the \(tool) sign-in. Choose Allow when asked."
+        case .needsConsent(let tool):
+            return "\(tool) renewed its sign-in. Click Allow and macOS will ask once before AIrail reads it; AIrail never asks in the background."
         case .expired(let tool):
             return "The \(tool) sign-in has expired. Open \(tool) to refresh it."
         case .missingKey(let platform):
@@ -85,6 +91,7 @@ enum ConnectionError: LocalizedError, Sendable {
         case .notInstalled(let tool): return "\(tool) not installed"
         case .notSignedIn(let tool): return "\(tool) not signed in"
         case .accessDenied: return "Access not allowed"
+        case .needsConsent: return "Needs your OK — click Allow"
         case .expired(let tool): return "Sign-in expired — open \(tool)"
         case .missingKey: return "No API key stored"
         case .invalidKey: return "API key rejected"
@@ -103,7 +110,7 @@ enum ConnectionError: LocalizedError, Sendable {
     /// we just couldn't refresh) as opposed to one that means the data is gone.
     var isTransient: Bool {
         switch self {
-        case .expired, .network, .offline, .shapeChanged, .accessDenied, .rateLimited, .temporarilyUnavailable: return true
+        case .expired, .network, .offline, .shapeChanged, .accessDenied, .needsConsent, .rateLimited, .temporarilyUnavailable: return true
         case .notInstalled, .notSignedIn, .missingKey, .invalidKey, .unreadable, .blockedHost, .unsupported: return false
         }
     }
@@ -122,9 +129,22 @@ enum ConnectionError: LocalizedError, Sendable {
         return false
     }
 
-    /// The symbol beside the message: no Wi-Fi for offline, a warning otherwise.
+    /// Waiting on the user's click before the Keychain is read again: the
+    /// tool renewed its sign-in, or the last dialog was declined.
+    var needsConsent: Bool {
+        switch self {
+        case .needsConsent, .accessDenied: return true
+        default: return false
+        }
+    }
+
+    /// The symbol beside the message: no Wi-Fi for offline, a raised hand
+    /// while waiting for the user's OK, a warning otherwise.
     var symbolName: String {
-        if case .offline = self { return "wifi.slash" }
-        return "exclamationmark.triangle"
+        switch self {
+        case .offline: return "wifi.slash"
+        case .needsConsent: return "hand.raised"
+        default: return "exclamationmark.triangle"
+        }
     }
 }

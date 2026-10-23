@@ -25,7 +25,7 @@ struct PrivacyPane: View {
             Section {
                 Button("Remove All AIrail Data…", role: .destructive) { confirmingRemoval = true }
             } footer: {
-                Text("Removes AIrail's preferences, its own Keychain items (the API keys you pasted), the usage ledgers and its launch-at-login registration, then quits. Nothing that belongs to another tool is touched.")
+                Text("Removes AIrail's preferences, its own Keychain items (the API keys you pasted and its copy of the Claude Code token), the usage ledgers and its launch-at-login registration, then quits. Nothing that belongs to another tool is touched.")
             }
         }
         .formStyle(.grouped)
@@ -56,7 +56,7 @@ struct PrivacyPane: View {
         } header: {
             Text("What AIrail reads")
         } footer: {
-            Text("Read only, and only after you connect the account. Nothing is written back, no refresh token is ever used, and no token is copied to disk.")
+            Text("Read only, and only after you connect the account. Nothing is written back and no refresh token is ever used. The one token AIrail copies — Claude Code's access token, until it expires — lives in AIrail's own Keychain item, never in a file.")
         }
     }
 
@@ -136,7 +136,7 @@ struct PrivacyPane: View {
             LabeledContent("Preferences", value: kept.preferences)
             LabeledContent("Keychain items", value: kept.keychainItems)
             LabeledContent("Usage ledgers", value: kept.ledgers)
-            LabeledContent("Cache, cookies, tokens on disk", value: "None")
+            LabeledContent("Cache, cookies, tokens in files", value: "None")
         } header: {
             Text("What it keeps")
         } footer: {

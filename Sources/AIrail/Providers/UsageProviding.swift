@@ -17,11 +17,18 @@ protocol UsageProviding: AnyObject {
     /// A real read of the account's usage. Throws a `ConnectionError` when the
     /// sign-in can't be found, read, or used; never returns invented numbers.
     func fetchUsage() async throws -> UsageSnapshot
+    /// The same read, saying whether the user asked for it. Only an
+    /// interactive read may put up a macOS dialog; the timer's never do.
+    func fetchUsage(interactive: Bool) async throws -> UsageSnapshot
+    /// The account was removed: drop anything kept of the borrowed sign-in.
+    func forgetBorrowedSignIn()
 }
 
 extension UsageProviding {
     var brandIconPath: String? { nil }
     var kind: ProviderKind { .tool }
+    func fetchUsage(interactive: Bool) async throws -> UsageSnapshot { try await fetchUsage() }
+    func forgetBorrowedSignIn() {}
 }
 
 /// A provider whose data comes from an API key the user pastes. The key lives

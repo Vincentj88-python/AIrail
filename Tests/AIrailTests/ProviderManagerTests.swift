@@ -157,6 +157,32 @@ final class ProviderManagerTests: XCTestCase {
         XCTAssertEqual(manager.lastErrors["claude"]?.shortDescription, "Reading sign-in — retrying")
     }
 
+    /// Only a click may put up a Keychain dialog: the timer's reads are
+    /// non-interactive, Refresh/Allow and Connect are interactive, and a
+    /// renewed sign-in waiting for consent keeps the last numbers.
+    @MainActor
+    func testOnlyAClickReadsInteractively() async throws {
+        let fake = FakeProvider(id: "claude", results: [
+            .failure(.needsConsent(tool: "Claude Code")),
+            .success(Self.snapshot("claude", percent: 42)),
+        ])
+        let codex = FakeProvider(id: "codex", results: [.success(Self.snapshot("codex", percent: 7))])
+        let (manager, settings) = try makeManager([fake, codex])
+        try await manager.connect("codex")
+        XCTAssertEqual(codex.interactiveReads, [true], "connecting is a click")
+        settings.connect("claude")
+
+        await manager.refresh("claude")
+        XCTAssertEqual(fake.interactiveReads, [false], "the timer never asks")
+        XCTAssertEqual(manager.lastErrors["claude"]?.needsConsent, true)
+        XCTAssertEqual(manager.lastErrors["claude"]?.shortDescription, "Needs your OK — click Allow")
+
+        await manager.refresh("claude", force: true)
+        XCTAssertEqual(fake.interactiveReads, [false, true], "Allow is a click, and skips the backoff")
+        XCTAssertEqual(manager.snapshots["claude"]?.sessionPercent, 42)
+        XCTAssertNil(manager.lastErrors["claude"])
+    }
+
     @MainActor
     func testHardFailureBlanksTheNumbersWithoutBackingOff() async throws {
         let fake = FakeProvider(id: "claude", results: [
@@ -782,6 +808,8 @@ final class FakeProvider: UsageProviding {
 
     var results: [Result<UsageSnapshot, ConnectionError>]
     private(set) var reads = 0
+    /// Whether each read came from a click (`interactive`), in order.
+    private(set) var interactiveReads: [Bool] = []
     var holdsReads = false
     private var held: [CheckedContinuation<Void, Never>] = []
 
@@ -792,6 +820,11 @@ final class FakeProvider: UsageProviding {
     }
 
     func isInstalled() -> Bool { installed }
+
+    func fetchUsage(interactive: Bool) async throws -> UsageSnapshot {
+        interactiveReads.append(interactive)
+        return try await fetchUsage()
+    }
 
     func fetchUsage() async throws -> UsageSnapshot {
         let turn = reads

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **No surprise password dialogs.** AIrail no longer reads Claude Code's Keychain item from a background refresh. It keeps its own copy of the access token in its own Keychain item until it expires (so a relaunch or an update doesn't ask), reads `~/.claude/.credentials.json` when Claude Code keeps one, and checks whether Claude Code's item has changed without opening it. When Claude Code has renewed its sign-in, the card and the account page show **Allow…**, and the macOS dialog appears only when you click it.
+
 ## 0.3.1
 
 A small release: one setting, and the first update the in-app checker has had to announce.

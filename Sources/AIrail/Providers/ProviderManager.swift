@@ -218,7 +218,7 @@ final class ProviderManager: ObservableObject {
         }
         let snapshot: UsageSnapshot
         do {
-            snapshot = try await provider.fetchUsage()
+            snapshot = try await provider.fetchUsage(interactive: true)
         } catch {
             if key != nil { keyed?.forgetKey() }
             throw error
@@ -243,6 +243,7 @@ final class ProviderManager: ObservableObject {
         inflight[providerId] = nil
         refreshingIds.remove(providerId) // the cancelled read leaves the mark to whoever holds it next
         (provider(for: providerId) as? any KeyedUsageProviding)?.forgetKey()
+        provider(for: providerId)?.forgetBorrowedSignIn()
         settings.disconnect(providerId)
         snapshots[providerId] = nil
         lastLive[providerId] = nil
@@ -401,8 +402,9 @@ final class ProviderManager: ObservableObject {
 
     /// One read per provider at a time: a refresh that finds one in flight
     /// waits for its result rather than starting (or cancelling) another.
-    /// A manual refresh (the account page's Refresh button) ignores the
-    /// backoff window; the timer honours it.
+    /// A manual refresh (the account page's Refresh button, the card's
+    /// Allow) ignores the backoff window and may show a macOS dialog; the
+    /// timer honours the backoff and never does.
     func refresh(_ providerId: String, force: Bool = false) async {
         if let running = inflight[providerId] {
             await running.value
@@ -423,7 +425,7 @@ final class ProviderManager: ObservableObject {
                 }
                 return
             }
-            let task = Task { @MainActor in await self.read(provider) }
+            let task = Task { @MainActor in await self.read(provider, interactive: force) }
             inflight[providerId] = task
             await task.value
             if inflight[providerId] == task {
@@ -439,14 +441,14 @@ final class ProviderManager: ObservableObject {
     /// The read behind `refresh`, run as its own task so a second refresh can
     /// join it and a disconnect can cancel it. Nothing is written once the
     /// account is gone — not even the "cancelled" error the read then throws.
-    private func read(_ provider: any UsageProviding) async {
+    private func read(_ provider: any UsageProviding, interactive: Bool = false) async {
         let providerId = provider.id
         refreshingIds.insert(providerId)
         // A cancelled read was unmarked by `disconnect`; if the account was
         // added back meanwhile, the mark belongs to its fresh read.
         defer { if !Task.isCancelled { refreshingIds.remove(providerId) } }
         do {
-            let snapshot = try await provider.fetchUsage()
+            let snapshot = try await provider.fetchUsage(interactive: interactive)
             guard stillWanted(providerId) else { return }
             Log.refresh.info("\(providerId, privacy: .public): read, \(snapshot.status.label, privacy: .public)")
             recordSample(snapshot)
