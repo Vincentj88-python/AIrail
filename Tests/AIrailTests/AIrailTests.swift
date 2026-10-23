@@ -537,6 +537,80 @@ final class AIrailTests: XCTestCase {
         XCTAssertTrue(err.errorDescription?.contains("never asks in the background") == true)
     }
 
+    // MARK: Advice
+
+    private func adviceInput(
+        _ id: String, session: Double? = nil, resetsIn: TimeInterval? = nil,
+        weekly: Double? = nil, weekResetsIn: TimeInterval? = nil,
+        status: UsageStatus = .ok, projection: UsageProjection? = nil, resets: Bool = true, now: Date
+    ) -> UsageAdvice.Input {
+        var snapshot = UsageSnapshot.empty(providerId: id, displayName: id.capitalized, status: status)
+        snapshot.sessionPercent = session
+        snapshot.resetsAt = resetsIn.map { now.addingTimeInterval($0) }
+        snapshot.weeklyPercent = weekly
+        snapshot.weeklyResetsAt = weekResetsIn.map { now.addingTimeInterval($0) }
+        return UsageAdvice.Input(id: id, name: id.capitalized, snapshot: snapshot, projection: projection, resets: resets)
+    }
+
+    func testAdviceSaysUseItOrLoseItBeforeASessionResets() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let advice = UsageAdvice.advise([
+            adviceInput("claude", session: 38, resetsIn: 40 * 60, weekly: 20, weekResetsIn: 4 * 86400, now: now),
+        ], now: now)
+        let first = try XCTUnwrap(advice.first)
+        XCTAssertEqual(first.kind, .useItOrLoseIt(unused: 62, resetsAt: now.addingTimeInterval(2400), window: "session"))
+        XCTAssertEqual(first.tone, .opportunity)
+        let locale = Locale(identifier: "en_US")
+        XCTAssertEqual(first.sentence(now: now, locale: locale), "Claude's session resets in 40m with 62% unused — a good moment for the big task.")
+        XCTAssertEqual(first.caption(now: now, locale: locale), "Claude 62% unused · resets in 40m")
+
+        XCTAssertTrue(UsageAdvice.advise([
+            adviceInput("claude", session: 38, resetsIn: 40 * 60, weekly: 75, weekResetsIn: 4 * 86400, now: now),
+        ], now: now).isEmpty, "a session's leftovers aren't worth spending when the week is nearly gone")
+        XCTAssertTrue(UsageAdvice.advise([
+            adviceInput("claude", session: 38, resetsIn: 3 * 3600, now: now),
+        ], now: now).isEmpty, "three hours out is not yet a nudge")
+        XCTAssertTrue(UsageAdvice.advise([
+            adviceInput("claude", session: 38, resetsIn: 40 * 60, status: .stale, now: now),
+        ], now: now).isEmpty, "never from a stale reading")
+        XCTAssertTrue(UsageAdvice.advise([
+            adviceInput("openrouter", session: 38, resetsIn: 40 * 60, resets: false, now: now),
+        ], now: now).isEmpty, "a balance doesn't expire")
+    }
+
+    func testAdviceNamesTheWeekAboutToEndUnused() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let first = try XCTUnwrap(UsageAdvice.advise([
+            adviceInput("codex", session: 10, resetsIn: 4 * 3600, weekly: 45, weekResetsIn: 10 * 3600, now: now),
+        ], now: now).first)
+        XCTAssertEqual(first.kind, .useItOrLoseIt(unused: 55, resetsAt: now.addingTimeInterval(36000), window: "week"))
+        XCTAssertEqual(UsageAdvice.noun(forPeriod: "monthly premium"), "month")
+        XCTAssertEqual(UsageAdvice.noun(forPeriod: "billing cycle"), "billing cycle")
+    }
+
+    func testAdviceRanksWallsFirstAndPointsToRoom() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let pace = UsageProjection(ratePerHour: 20, hitsLimitAt: now.addingTimeInterval(3600), resetsFirst: false, basis: "session")
+        let advice = UsageAdvice.advise([
+            adviceInput("cursor", session: 38, resetsIn: 30 * 60, now: now),
+            adviceInput("claude", session: 80, resetsIn: 3 * 3600, projection: pace, now: now),
+            adviceInput("codex", session: 100, resetsIn: 2 * 3600, now: now),
+            adviceInput("copilot", session: 12, resetsIn: 5 * 3600, now: now),
+        ], now: now)
+        XCTAssertEqual(advice.map(\.accountId), ["codex", "claude", "cursor"], "spent, then ahead, then leftovers; nothing for an account that's fine")
+        XCTAssertEqual(advice[0].kind, .atWall(until: now.addingTimeInterval(7200)))
+        XCTAssertEqual(advice[0].switchTo?.id, "copilot", "the account with the most room")
+        XCTAssertNil(advice[2].switchTo, "leftovers don't need somewhere else to go")
+        let locale = Locale(identifier: "en_US")
+        XCTAssertTrue(advice[1].sentence(now: now, locale: locale).hasSuffix("2h before it resets. Copilot has 88% left."),
+                      advice[1].sentence(now: now, locale: locale))
+
+        let calm = UsageProjection(ratePerHour: 2, hitsLimitAt: now.addingTimeInterval(9 * 3600), resetsFirst: true, basis: "session")
+        XCTAssertTrue(UsageAdvice.advise([
+            adviceInput("claude", session: 80, resetsIn: 3 * 3600, projection: calm, now: now),
+        ], now: now).isEmpty, "a pace that the reset outruns is nothing to act on")
+    }
+
     func testClaudeUsageParse() throws {
         let json = #"""
         {"five_hour":{"utilization":2.0,"resets_at":"2026-09-02T09:30:00.479395+00:00","limit_dollars":null},

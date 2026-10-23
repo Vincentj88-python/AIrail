@@ -122,7 +122,8 @@ struct NotchView: View {
         let info = id.flatMap { manager.providerInfo(for: $0) }
         let snapshot = id.flatMap { manager.snapshot(for: $0) }
         let headroom = manager.railHeadroom
-        let idle = info == nil ? headroom.captionVariants() : []
+        // Idle, the most urgent advice leads; the headroom reading is the fallback.
+        let idle = info == nil ? manager.advice.prefix(1).map { $0.caption() } + headroom.captionVariants() : []
         return HStack(spacing: 6) {
             if !idle.isEmpty {
                 // The longest reading that fits the island's one caption row.
@@ -130,6 +131,7 @@ struct NotchView: View {
                     Text(idle[0])
                     if idle.count > 1 { Text(idle[1]) }
                     if idle.count > 2 { Text(idle[2]) }
+                    if idle.count > 3 { Text(idle[3]) }
                 }
                 .foregroundStyle(.white.opacity(0.8))
                 if let qualifier = headroom.qualifier {

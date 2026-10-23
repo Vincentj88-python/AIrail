@@ -1,5 +1,5 @@
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 
 /// Native macOS notifications for the moments worth interrupting for: crossing
 /// a usage threshold, and that window resetting so you can batch heavy work.

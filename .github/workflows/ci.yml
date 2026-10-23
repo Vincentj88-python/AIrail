@@ -13,7 +13,7 @@ jobs:
     # macos-15 carries Xcode 16 (Swift 6); macos-14 stopped at Xcode 15.
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build and test
         run: |

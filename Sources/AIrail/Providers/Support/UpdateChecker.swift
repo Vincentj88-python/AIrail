@@ -1,5 +1,5 @@
 import AppKit
-import UserNotifications
+@preconcurrency import UserNotifications
 
 /// A lightweight "is there a newer release?" check against the project's GitHub
 /// releases. It notifies and hands off the download — it does not replace the

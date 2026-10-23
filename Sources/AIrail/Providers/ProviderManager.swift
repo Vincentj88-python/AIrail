@@ -191,6 +191,22 @@ final class ProviderManager: ObservableObject {
         HeadroomSummary.of(railProviderInfos.map { ($0.id, $0.displayName, snapshots[$0.id]) })
     }
 
+    /// What to do about the rail's accounts, most urgent first: a spent
+    /// window, a limit the pace reaches before the reset, leftovers about
+    /// to expire. The card leads with its account's; the island's idle
+    /// caption with the first.
+    var advice: [UsageAdvice] {
+        UsageAdvice.advise(railProviderInfos.map { info in
+            UsageAdvice.Input(
+                id: info.id,
+                name: info.displayName,
+                snapshot: snapshots[info.id],
+                projection: projection(for: info.id),
+                resets: info.kind == .tool
+            )
+        }, now: clock())
+    }
+
     func providerInfo(for id: String) -> ProviderInfo? {
         allProviderInfos.first { $0.id == id }
     }

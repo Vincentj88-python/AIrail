@@ -26,6 +26,9 @@ struct OverlayView: View {
             if let notice = notice(info: info, snapshot: snapshot) {
                 notice
             }
+            if let advice = manager.advice.first(where: { $0.accountId == info.id }) {
+                AdviceBanner(advice: advice, color: info.color)
+            }
             sessionSection(info: info, snapshot: snapshot)
             if let meters = snapshot?.detail.meters, !meters.isEmpty {
                 MetersList(meters: meters, color: info.color)
@@ -493,5 +496,59 @@ struct OverlayView: View {
             return "\(UsageFormatting.dollars(spend)) of \(UsageFormatting.dollars(cap)) limit"
         }
         return UsageFormatting.dollars(spend)
+    }
+}
+
+/// The card's lead: one sentence on what to do about this account's
+/// numbers, tinted by how urgent it is. The countdown in it ticks.
+private struct AdviceBanner: View {
+    let advice: UsageAdvice
+    let color: Color
+
+    private var tint: Color {
+        switch advice.tone {
+        case .critical: return UsageSeverity.critical.accent
+        case .warning: return UsageSeverity.warning.accent
+        case .opportunity: return color
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: advice.symbolName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(tint.opacity(0.16)))
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(advice.headline.uppercased())
+                        .font(.caption.weight(.semibold))
+                        .tracking(0.6)
+                        .foregroundStyle(tint)
+                    if advice.isDemo {
+                        Text("demo")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    Text(advice.sentence(now: context.date))
+                        .font(.system(size: 14, weight: .medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(tint.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(tint.opacity(0.22))
+        )
+        .accessibilityElement(children: .combine)
     }
 }

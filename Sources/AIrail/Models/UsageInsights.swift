@@ -233,3 +233,207 @@ extension UsageFormatting {
         return Duration.seconds(seconds).formatted(.units(allowed: units, width: .narrow).locale(locale))
     }
 }
+
+/// What to do about the numbers, in one sentence — the reading a meter
+/// can't give. Plain rules on live figures, the clock and the pace
+/// projection, ranked by how soon they matter: a spent window, a limit the
+/// current pace reaches before the reset, then capacity already paid for
+/// that expires unused at the reset. Never from a stale or failed reading.
+struct UsageAdvice: Sendable, Equatable {
+    enum Kind: Sendable, Equatable {
+        /// A window is spent; the wall lifts at `until`.
+        case atWall(until: Date)
+        /// At this pace the limit arrives at `hitsAt`, before the window
+        /// resets at `resetsAt`.
+        case wallAhead(hitsAt: Date, resetsAt: Date?)
+        /// The window resets at `resetsAt` with `unused` points left.
+        case useItOrLoseIt(unused: Double, resetsAt: Date, window: String)
+    }
+
+    enum Tone: Sendable, Equatable {
+        case critical, warning, opportunity
+    }
+
+    /// One account as the rules see it.
+    struct Input: Sendable {
+        let id: String
+        let name: String
+        let snapshot: UsageSnapshot?
+        let projection: UsageProjection?
+        /// A tool's plan: its windows reset, so unused capacity expires. A
+        /// keyed balance doesn't, so it never gets use-it-or-lose-it.
+        let resets: Bool
+    }
+
+    let accountId: String
+    let accountName: String
+    let kind: Kind
+    /// Another account comfortably under its limits, for the wall cases.
+    let switchTo: HeadroomSummary.Account?
+    /// Read from demo numbers; the sentence is real logic on made-up data.
+    let isDemo: Bool
+
+    /// How close a session reset must be for its leftovers to be worth a
+    /// nudge, and how much must be left.
+    static let sessionHorizon: TimeInterval = 90 * 60
+    static let sessionUnused: Double = 40
+    /// The same for the longer window: a day for a week, three for a month.
+    static let weekHorizon: TimeInterval = 24 * 3600
+    static let monthHorizon: TimeInterval = 72 * 3600
+    static let periodUnused: Double = 30
+
+    /// Every account's most pressing advice, most urgent first; at most one
+    /// per account, and nothing for an account that is simply fine.
+    static func advise(_ inputs: [Input], now: Date = Date()) -> [UsageAdvice] {
+        let live = inputs.filter { $0.snapshot?.status == .ok || $0.snapshot?.status == .demo }
+        let advice = live.compactMap { input -> UsageAdvice? in
+            guard let snapshot = input.snapshot,
+                  let kind = kind(for: snapshot, projection: input.projection, resets: input.resets, now: now)
+            else { return nil }
+            let wall: Bool
+            switch kind {
+            case .atWall, .wallAhead: wall = true
+            case .useItOrLoseIt: wall = false
+            }
+            return UsageAdvice(
+                accountId: input.id,
+                accountName: input.name,
+                kind: kind,
+                switchTo: wall ? room(besides: input.id, in: live, status: snapshot.status) : nil,
+                isDemo: snapshot.status == .demo
+            )
+        }
+        return advice.sorted { $0.urgency < $1.urgency }
+    }
+
+    private static func kind(for snapshot: UsageSnapshot, projection: UsageProjection?, resets: Bool, now: Date) -> Kind? {
+        if let until = snapshot.atLimitResetsAt, until > now {
+            return .atWall(until: until)
+        }
+        if let projection, !projection.resetsFirst, projection.hitsLimitAt > now {
+            return .wallAhead(hitsAt: projection.hitsLimitAt, resetsAt: snapshot.ringResetsAt)
+        }
+        guard resets else { return nil }
+        // The longer window first: a week's leftovers are worth more than a
+        // session's. A session's are only worth spending while the week has
+        // room for them — spending them would otherwise bring the weekly wall closer.
+        if let percent = snapshot.weeklyPercent,
+           let reset = snapshot.weeklyResetsAt ?? (snapshot.sessionPercent == nil ? snapshot.resetsAt : nil),
+           reset > now,
+           reset.timeIntervalSince(now) <= (snapshot.periodLabel == "weekly" ? weekHorizon : monthHorizon),
+           100 - percent >= periodUnused {
+            return .useItOrLoseIt(unused: 100 - percent, resetsAt: reset, window: noun(forPeriod: snapshot.periodLabel))
+        }
+        if let percent = snapshot.sessionPercent, percent > 0,
+           let reset = snapshot.resetsAt, reset > now,
+           reset.timeIntervalSince(now) <= sessionHorizon,
+           100 - percent >= sessionUnused,
+           (snapshot.weeklyPercent ?? 0) < 70 {
+            return .useItOrLoseIt(unused: 100 - percent, resetsAt: reset, window: "session")
+        }
+        return nil
+    }
+
+    /// The account with the most room under the warning line, other than
+    /// `id`, from readings of the same kind (demo with demo, live with live).
+    private static func room(besides id: String, in inputs: [Input], status: UsageStatus) -> HeadroomSummary.Account? {
+        var best: HeadroomSummary.Account?
+        for input in inputs where input.id != id {
+            guard let snapshot = input.snapshot, snapshot.status == status,
+                  snapshot.atLimitResetsAt == nil,
+                  let percent = snapshot.peakPercent, UsageSeverity.of(percent) == .normal
+            else { continue }
+            if best.map({ percent < $0.percent }) ?? true {
+                best = HeadroomSummary.Account(id: input.id, name: input.name, percent: percent, resetsAt: snapshot.peakResetsAt, status: snapshot.status)
+            }
+        }
+        return best
+    }
+
+    /// "weekly" → "week", "monthly premium" → "month", "billing cycle" stays.
+    static func noun(forPeriod label: String) -> String {
+        if label == "weekly" { return "week" }
+        if label.hasPrefix("month") { return "month" }
+        return label
+    }
+
+    /// Spent walls first (soonest to lift first), then walls ahead (soonest
+    /// first), then the most unused capacity.
+    private var urgency: Double {
+        switch kind {
+        case .atWall(let until): return until.timeIntervalSinceReferenceDate / 1e12
+        case .wallAhead(let hitsAt, _): return 1 + hitsAt.timeIntervalSinceReferenceDate / 1e12
+        case .useItOrLoseIt(let unused, _, _): return 3 - unused / 100
+        }
+    }
+
+    var tone: Tone {
+        switch kind {
+        case .atWall: return .critical
+        case .wallAhead: return .warning
+        case .useItOrLoseIt: return .opportunity
+        }
+    }
+
+    var symbolName: String {
+        switch kind {
+        case .atWall: return "hand.raised.fill"
+        case .wallAhead: return "speedometer"
+        case .useItOrLoseIt: return "hourglass"
+        }
+    }
+
+    /// The small caps line above the sentence.
+    var headline: String {
+        switch kind {
+        case .atWall: return "At the limit"
+        case .wallAhead: return "Limit ahead"
+        case .useItOrLoseIt: return "Use it or lose it"
+        }
+    }
+
+    /// The one sentence, e.g. "At this pace Claude hits its limit at 4:15 PM,
+    /// 45m before it resets. Codex has 88% left."
+    func sentence(now: Date = Date(), locale: Locale = .autoupdatingCurrent) -> String {
+        var text: String
+        switch kind {
+        case .atWall(let until):
+            text = "\(accountName) is at its limit for another \(UsageFormatting.countdown(to: until, now: now, locale: locale)), until \(Self.moment(until, now: now, locale: locale))."
+        case .wallAhead(let hitsAt, let resetsAt):
+            text = "At this pace \(accountName) hits its limit at \(Self.moment(hitsAt, now: now, locale: locale))"
+            if let resetsAt, resetsAt > hitsAt {
+                text += ", \(UsageFormatting.duration(hours: resetsAt.timeIntervalSince(hitsAt) / 3600, locale: locale)) before it resets."
+            } else {
+                text += "."
+            }
+        case .useItOrLoseIt(let unused, let resetsAt, let window):
+            text = "\(accountName)'s \(window) resets in \(UsageFormatting.countdown(to: resetsAt, now: now, locale: locale)) with \(Int(unused.rounded()))% unused — "
+            text += window == "session" ? "a good moment for the big task." : "capacity you've paid for that won't carry over."
+        }
+        if let switchTo {
+            text += " \(switchTo.name) has \(Int((100 - switchTo.percent).rounded()))% left."
+        }
+        return text
+    }
+
+    /// The island's one-line form, e.g. "Claude 62% unused · resets in 40m".
+    func caption(now: Date = Date(), locale: Locale = .autoupdatingCurrent) -> String {
+        switch kind {
+        case .atWall(let until):
+            let base = "\(accountName) at limit · \(UsageFormatting.countdown(to: until, now: now, locale: locale))"
+            return switchTo.map { base + " · \($0.name) has room" } ?? base
+        case .wallAhead(let hitsAt, _):
+            let base = "\(accountName) limit ≈ \(UsageFormatting.timeString(hitsAt, locale: locale))"
+            return switchTo.map { base + " · \($0.name) has room" } ?? base
+        case .useItOrLoseIt(let unused, let resetsAt, _):
+            return "\(accountName) \(Int(unused.rounded()))% unused · resets in \(UsageFormatting.countdown(to: resetsAt, now: now, locale: locale))"
+        }
+    }
+
+    /// "4:15 PM" today, "Mon 4:15 PM" later in the week.
+    private static func moment(_ date: Date, now: Date, locale: Locale) -> String {
+        Calendar.current.isDate(date, inSameDayAs: now)
+            ? UsageFormatting.timeString(date, locale: locale)
+            : UsageFormatting.weekdayTime(date, locale: locale)
+    }
+}
